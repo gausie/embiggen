@@ -79,6 +79,65 @@ interface Scored {
   efficiency: number;
 }
 
+/** Rank candidates by efficiency, warming and re-scoring the front-runners' prices. */
+function rankSources(
+  candidates: Source[],
+  target: Target,
+  options: GainOptions,
+  byEfficiency: (a: Scored, b: Scored) => number,
+  canAccessMall: boolean,
+): Scored[] {
+  const ranked: Scored[] = candidates.map((source) => ({
+    source,
+    efficiency: source.efficiency(target, options),
+  }));
+  ranked.sort(byEfficiency);
+  const frontRunners = ranked.slice(0, PREWARM_COUNT);
+  for (const { source } of frontRunners) source.warmPrice(canAccessMall);
+  for (const entry of frontRunners) {
+    entry.efficiency = entry.source.efficiency(target, options);
+  }
+  ranked.sort(byEfficiency);
+  return ranked;
+}
+
+interface GainResult {
+  /** The source silently granted nothing and has been blocked for the run. */
+  blocked: boolean;
+  /** Progress was made, so a stalled modifier value is tolerable next loop. */
+  allowStall: boolean;
+  turns: number;
+}
+
+/** Apply `source`, confirming it actually granted turns, and report the outcome. */
+function applyGain(source: Source, target: Target, state: RunState): GainResult {
+  const { effect } = source;
+  const before = haveEffect(effect);
+  const amount = clamp(
+    Math.ceil((target.minTurns - before) / Math.max(1, source.turnsPerUse)),
+    1,
+    10,
+  );
+  source.apply(amount);
+
+  let after = haveEffect(effect);
+  if (after !== before) {
+    return { blocked: false, allowStall: before !== 0 && after < 1000, turns: after };
+  }
+
+  // A source can silently grant zero turns (e.g. spent future drugs); confirm.
+  cliExecute("refresh status");
+  after = haveEffect(effect);
+  if (after !== before) {
+    return { blocked: false, allowStall: false, turns: after };
+  }
+  if (LIMITED_EFFECTS.has(effect) || source.songLike) {
+    state.blockedEffects.add(effect);
+    return { blocked: true, allowStall: false, turns: after };
+  }
+  abort(`Mafia bug: ${source.description} did not gain any turns.`);
+}
+
 /** Apply effect sources until `target` is met (or we run out of affordable options). */
 export function raiseModifier(
   target: Target,
@@ -112,22 +171,16 @@ export function raiseModifier(
     allowStall = false;
     lastValue = value;
 
-    // Rank once, warm mall prices for the front-runners, then re-score just those.
-    const ranked: Scored[] = candidates.map((source) => ({
-      source,
-      efficiency: source.efficiency(target, options),
-    }));
-    ranked.sort(byEfficiency);
-    const frontRunners = ranked.slice(0, PREWARM_COUNT);
-    for (const { source } of frontRunners) source.warmPrice(canAccessMall);
-    for (const entry of frontRunners) {
-      entry.efficiency = entry.source.efficiency(target, options);
-    }
-    ranked.sort(byEfficiency);
+    const ranked = rankSources(
+      candidates,
+      target,
+      options,
+      byEfficiency,
+      canAccessMall,
+    );
 
     let appliedOne = false;
     for (const { source, efficiency } of ranked) {
-      const { effect } = source;
       if (effectSkippable(source, target, options, state, satisfiedThisTarget)) {
         continue;
       }
@@ -135,7 +188,7 @@ export function raiseModifier(
       const plan = source.plan(options, state, canAccessMall);
       if (!plan) continue;
 
-      // Check the shared per-turn meat budget now, but only spend it once we commit below.
+      // Check the shared per-turn meat budget now, but only spend it once we commit.
       const plannedSpend =
         target.meatPerTurnLimit > 0 ? source.meatPerTurn() : 0;
       if (plannedSpend + meatPerTurnUsed > target.meatPerTurnLimit) continue;
@@ -145,34 +198,12 @@ export function raiseModifier(
       }
 
       if (!options.silent) printHtml(`${source.description}: ${efficiency} efficiency`);
-      if (plan.wish) abort(`wish for ${effect}`);
+      if (plan.wish) abort(`wish for ${source.effect}`);
 
-      const before = haveEffect(effect);
-      const amount = clamp(
-        Math.ceil((target.minTurns - before) / Math.max(1, source.turnsPerUse)),
-        1,
-        10,
-      );
-      source.apply(amount);
-
-      let after = haveEffect(effect);
-      if (after === before) {
-        // A source can silently grant zero turns (e.g. spent future drugs); confirm.
-        cliExecute("refresh status");
-        after = haveEffect(effect);
-        if (after === before) {
-          if (LIMITED_EFFECTS.has(effect) || source.songLike) {
-            state.blockedEffects.add(effect);
-            continue;
-          }
-          abort(`Mafia bug: ${source.description} did not gain any turns.`);
-        }
-      } else if (before !== 0 && after < 1000) {
-        // We made progress, so tolerate a stalled modifier value for one more loop.
-        allowStall = true;
-      }
-
-      if (after >= target.minTurns) satisfiedThisTarget.add(effect);
+      const result = applyGain(source, target, state);
+      if (result.blocked) continue;
+      if (result.allowStall) allowStall = true;
+      if (result.turns >= target.minTurns) satisfiedThisTarget.add(source.effect);
       meatPerTurnUsed += plannedSpend;
       state.meatSpent += plan.meatCost;
       appliedOne = true;
