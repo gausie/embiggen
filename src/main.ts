@@ -1,6 +1,6 @@
 import { canInteract, myAdventures, printHtml } from "kolmafia";
 import { describeGoals, parseCommand, printUsage } from "./cli";
-import { newRunState, Target } from "./options";
+import { DEFAULT_MAX_MEAT, newRunState, Target } from "./options";
 import { buildRestrictions } from "./restrictions";
 import { raiseModifier } from "./upkeep";
 
@@ -23,7 +23,7 @@ export function main(input: string): void {
 
   if (!options.silent) {
     printHtml(`embiggen v${VERSION}`);
-    if (options.maxMeatToSpend !== 100000) {
+    if (options.maxMeatToSpend !== DEFAULT_MAX_MEAT) {
       printHtml(`Spending up to ${options.maxMeatToSpend} meat.`);
     }
     if (maxEfficiency !== null) printHtml(`${maxEfficiency} efficiency`);

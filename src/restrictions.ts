@@ -40,7 +40,10 @@ export const RICHIE_SONGS = new Set(
   $skills`The Ballad of Richie Thingfinder, Benetton's Medley of Diversity, Elron's Explosive Etude, Chorale of Companionship, Prelude of Precision`,
 );
 
-const ACCORDION_SONGS = $skills`The Moxious Madrigal, The Magical Mojomuscular Melody, Cletus's Canticle of Celerity, The Power Ballad of the Arrowsmith, The Polka of Plenty, Jackasses' Symphony of Destruction, Fat Leon's Phat Loot Lyric, Brawnee's Anthem of Absorption, The Psalm of Pointiness, Stevedave's Shanty of Superiority, Aloysius' Antiphon of Aptitude, The Ode to Booze, The Sonata of Sneakiness, Carlweather's Cantata of Confrontation, Ur-Kel's Aria of Annoyance, Dirge of Dreadfulness, The Ballad of Richie Thingfinder, Benetton's Medley of Diversity, Elron's Explosive Etude, Chorale of Companionship, Prelude of Precision, Donho's Bubbly Ballad, Cringle's Curative Carol, Inigo's Incantation of Inspiration`;
+const ACCORDION_SONGS = [
+  ...$skills`The Moxious Madrigal, The Magical Mojomuscular Melody, Cletus's Canticle of Celerity, The Power Ballad of the Arrowsmith, The Polka of Plenty, Jackasses' Symphony of Destruction, Fat Leon's Phat Loot Lyric, Brawnee's Anthem of Absorption, The Psalm of Pointiness, Stevedave's Shanty of Superiority, Aloysius' Antiphon of Aptitude, The Ode to Booze, The Sonata of Sneakiness, Carlweather's Cantata of Confrontation, Ur-Kel's Aria of Annoyance, Dirge of Dreadfulness, Donho's Bubbly Ballad, Cringle's Curative Carol, Inigo's Incantation of Inspiration`,
+  ...RICHIE_SONGS,
+];
 
 const SONG_EFFECTS = new Set(ACCORDION_SONGS.map((skill) => toEffect(skill)));
 

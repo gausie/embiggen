@@ -14,7 +14,6 @@ import {
   refreshStatus,
 } from "kolmafia";
 import { $modifier, $stat, clamp, get } from "libram";
-import { effectiveModifier } from "./modifiers";
 import { GainOptions, RunState, Target } from "./options";
 import {
   FIXED_BLOCKED_EFFECTS,
@@ -56,7 +55,6 @@ function satisfied(target: Target, value: number): boolean {
 function effectSkippable(
   source: Source,
   target: Target,
-  options: GainOptions,
   state: RunState,
   satisfiedThisTarget: Set<Effect>,
 ): boolean {
@@ -68,8 +66,7 @@ function effectSkippable(
     satisfiedThisTarget.has(effect) ||
     (isSongEffect(effect) && active === 0 && songSlotsFull()) ||
     mutuallyExcluded(effect) ||
-    active >= target.minTurns ||
-    effectiveModifier(effect, target.modifier, options) === 0
+    active >= target.minTurns
   );
 }
 
@@ -83,9 +80,11 @@ function rankSources(
   candidates: Source[],
   target: Target,
   options: GainOptions,
-  byEfficiency: (a: Scored, b: Scored) => number,
   canAccessMall: boolean,
 ): Scored[] {
+  const wantPositive = target.value >= 0;
+  const byEfficiency = (a: Scored, b: Scored) =>
+    wantPositive ? a.efficiency - b.efficiency : b.efficiency - a.efficiency;
   const ranked: Scored[] = candidates.map((source) => ({
     source,
     efficiency: source.efficiency(target, options),
@@ -152,12 +151,8 @@ export function raiseModifier(
   state: RunState,
   restrictions: Restrictions,
 ): void {
-  const wantPositive = target.value >= 0;
   const canAccessMall = get("autoSatisfyWithMall", false);
   const candidates = sourcesFor(target, options, restrictions);
-
-  const byEfficiency = (a: Scored, b: Scored) =>
-    wantPositive ? a.efficiency - b.efficiency : b.efficiency - a.efficiency;
 
   const satisfiedThisTarget = new Set<Effect>();
   let meatPerTurnUsed = 0;
@@ -178,17 +173,11 @@ export function raiseModifier(
     allowStall = false;
     lastValue = value;
 
-    const ranked = rankSources(
-      candidates,
-      target,
-      options,
-      byEfficiency,
-      canAccessMall,
-    );
+    const ranked = rankSources(candidates, target, options, canAccessMall);
 
     let appliedOne = false;
     for (const { source, efficiency } of ranked) {
-      if (effectSkippable(source, target, options, state, satisfiedThisTarget)) {
+      if (effectSkippable(source, target, state, satisfiedThisTarget)) {
         continue;
       }
 

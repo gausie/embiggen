@@ -1,5 +1,8 @@
 import { Effect, Modifier } from "kolmafia";
 
+/** Default meat budget; also the sentinel for "the user didn't override it". */
+export const DEFAULT_MAX_MEAT = 100000;
+
 export interface GainOptions {
   silent: boolean;
   ignorePercentages: boolean;
@@ -12,7 +15,7 @@ export function defaultOptions(): GainOptions {
     silent: false,
     ignorePercentages: false,
     allowLimitedBuffs: false,
-    maxMeatToSpend: 100000,
+    maxMeatToSpend: DEFAULT_MAX_MEAT,
   };
 }
 
