@@ -195,21 +195,21 @@ export function printUsage(): void {
   printHtml("");
   printHtml("Example usage:");
   printHtml(
-    "<strong>gain 400 initiative</strong>: buff to 400 initiative, as efficiently as possible",
+    "<strong>embiggen 400 initiative</strong>: buff to 400 initiative, as efficiently as possible",
   );
   printHtml(
-    "<strong>gain 20 familiar weight 50 turns</strong>: buff to 20 familiar weight, for a minimum of 50 turns",
+    "<strong>embiggen 20 familiar weight 50 turns</strong>: buff to 20 familiar weight, for a minimum of 50 turns",
   );
   printHtml(
-    "<strong>gain 400 init 20 familiar weight 300 muscle 50 turns</strong>: buff familiar weight up to 20, initiative up to 400, and muscle up to 300, for 50 turns.",
+    "<strong>embiggen 400 init 20 familiar weight 300 muscle 50 turns</strong>: buff familiar weight up to 20, initiative up to 400, and muscle up to 300, for 50 turns.",
   );
   printHtml(
-    "<strong>gain 10000 monster level 10000 maxmeatspent</strong>: spend 10k meat on +monster level",
+    "<strong>embiggen 10000 monster level 10000 maxmeatspent</strong>: spend 10k meat on +monster level",
   );
   printHtml(
-    "<strong>gain weapon damage 0.5 efficiency</strong>: gain weapon damage while only using cheap effect sources - efficiency value can be tuned",
+    "<strong>embiggen weapon damage 0.5 efficiency</strong>: gain weapon damage while only using cheap effect sources - efficiency value can be tuned",
   );
   printHtml(
-    "<strong>gain hp 100 spendperturn</strong>: gain HP while spending up to one hundred meat per turn, total, across all effects gained. Better than efficiency.",
+    "<strong>embiggen hp 100 spendperturn</strong>: gain HP while spending up to one hundred meat per turn, total, across all effects gained. Better than efficiency.",
   );
 }

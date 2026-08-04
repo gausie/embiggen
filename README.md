@@ -1,17 +1,17 @@
-# Gain
-Efficient buffing.
+# embiggen
 
-How do I use it?
-----------------
-First, install it by running this command in KoLmafia's graphical CLI:
+Efficient buffing for KoLmafia. Given target modifier values, `embiggen` finds
+the cheapest combination of item and skill effect sources to reach them.
 
-<pre>
-git checkout https://github.com/Ezandora/Gain.git
-</pre>
-Once it's installed, go to the Graphical CLI, and type "gain help".
+Once installed, run `embiggen help` in the KoLmafia CLI for usage.
 
-To update the script itself, run this command in the graphical CLI:
+## Development
 
-<pre>
-git update
-</pre>
+```
+npm install            # install dependencies
+npm run build          # bundle to dist/scripts/embiggen/embiggen.js
+npm run install-mafia  # build and symlink into your local KoLmafia scripts
+npm test               # run the test suite
+npm run typecheck      # type-check without emitting
+npm run lint           # eslint + prettier
+```

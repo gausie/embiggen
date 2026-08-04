@@ -4,7 +4,7 @@ import { newRunState, Target } from "./options";
 import { buildRestrictions } from "./restrictions";
 import { raiseModifier } from "./upkeep";
 
-const VERSION = "1.2.5";
+const VERSION = "1.0.0";
 
 export function main(input: string): void {
   if (input.trim() === "" || input.includes("help")) {
@@ -22,7 +22,7 @@ export function main(input: string): void {
   } = parseCommand(input);
 
   if (!options.silent) {
-    printHtml(`Gain v${VERSION}`);
+    printHtml(`embiggen v${VERSION}`);
     if (options.maxMeatToSpend !== 100000) {
       printHtml(`Spending up to ${options.maxMeatToSpend} meat.`);
     }

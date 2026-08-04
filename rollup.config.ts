@@ -7,7 +7,7 @@ const watch = process.argv.includes("--watch") || process.argv.includes("-w");
 
 const baseSettings = {
   output: {
-    dir: "dist/scripts/gain",
+    dir: "dist/scripts/embiggen",
     format: "cjs",
     exports: "auto",
     chunkFileNames: "_[name].js",
@@ -44,7 +44,7 @@ const baseSettings = {
   watch: watch ? { clearScreen: false } : undefined,
 } satisfies RollupOptions;
 
-export default [{ gain: "src/main.ts" }].map((input) => ({
+export default [{ embiggen: "src/main.ts" }].map((input) => ({
   input,
   ...baseSettings,
 }));
