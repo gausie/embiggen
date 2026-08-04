@@ -1,17 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { eqi, parseNumber } from "../src/util";
-
-describe("eqi", () => {
-  it("compares case-insensitively", () => {
-    expect(eqi("Initiative", "initiative")).toBe(true);
-    expect(eqi("MEAT DROP", "meat drop")).toBe(true);
-  });
-
-  it("distinguishes genuinely different strings", () => {
-    expect(eqi("muscle", "moxie")).toBe(false);
-  });
-});
+import { parseNumber } from "../src/util";
 
 describe("parseNumber", () => {
   it("parses integers and decimals", () => {

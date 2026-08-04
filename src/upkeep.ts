@@ -4,6 +4,7 @@ import {
   Effect,
   familiarWeight,
   haveEffect,
+  Modifier,
   myBuffedstat,
   myFamiliar,
   myMaxhp,
@@ -12,7 +13,7 @@ import {
   print,
   printHtml,
 } from "kolmafia";
-import { $stat, clamp, get } from "libram";
+import { $modifier, $stat, clamp, get } from "libram";
 import { effectiveModifier } from "./modifiers";
 import { GainOptions, RunState, Target } from "./options";
 import {
@@ -29,19 +30,19 @@ const PREWARM_COUNT = 20;
 const MAX_ITERATIONS = 500;
 
 /** Live value of a modifier, reading buffed stats where mafia has no plain modifier. */
-function currentValue(modifier: string): number {
+function currentValue(modifier: Modifier): number {
   switch (modifier) {
-    case "muscle":
+    case $modifier`Muscle`:
       return myBuffedstat($stat`Muscle`);
-    case "mysticality":
+    case $modifier`Mysticality`:
       return myBuffedstat($stat`Mysticality`);
-    case "moxie":
+    case $modifier`Moxie`:
       return myBuffedstat($stat`Moxie`);
-    case "maximum mp":
+    case $modifier`Maximum MP`:
       return myMaxmp();
-    case "maximum hp":
+    case $modifier`Maximum HP`:
       return myMaxhp();
-    case "familiar weight":
+    case $modifier`Familiar Weight`:
       return numericModifier(modifier) + familiarWeight(myFamiliar());
     default:
       return numericModifier(modifier);

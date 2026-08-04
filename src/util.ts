@@ -1,8 +1,3 @@
-/** Case-insensitive string equality, replacing ASH's `≈` operator. */
-export function eqi(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase();
-}
-
 /** Parse a CLI token as a number, tolerating thousands separators. */
 export function parseNumber(token: string): number | null {
   const cleaned = token.replace(/,/g, "");

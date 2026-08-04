@@ -1,4 +1,4 @@
-import { Effect } from "kolmafia";
+import { Effect, Modifier } from "kolmafia";
 
 export interface GainOptions {
   silent: boolean;
@@ -17,7 +17,7 @@ export function defaultOptions(): GainOptions {
 }
 
 export interface Target {
-  modifier: string;
+  modifier: Modifier;
   value: number;
   minTurns: number;
   reasonableTurns: number;

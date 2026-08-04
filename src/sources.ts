@@ -287,8 +287,6 @@ export function sourcesFor(
   options: GainOptions,
   restrictions: Restrictions,
 ): Source[] {
-  if (target.modifier === "any") return [];
-
   const wantPositive = target.value >= 0;
   const path = myPath().name;
   const context: CandidateContext = {
