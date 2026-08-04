@@ -61,7 +61,7 @@ function effectSkippable(
   const { effect } = source;
   const active = haveEffect(effect);
   return (
-    state.blockedEffects.has(effect) ||
+    state.blockedSources.has(source.key) ||
     FIXED_BLOCKED_EFFECTS.has(effect) ||
     satisfiedThisTarget.has(effect) ||
     (isSongEffect(effect) && active === 0 && songSlotsFull()) ||
@@ -136,11 +136,12 @@ function applyGain(
     return { blocked: false, allowStall: false, turns: after };
   }
 
-  // Still nothing gained: block this effect and move on rather than aborting.
+  // Still nothing gained: block this source (not the whole effect — another
+  // source might work) and move on rather than aborting.
   if (!options.silent) {
     printHtml(`${source.description} gained no turns; skipping it.`);
   }
-  state.blockedEffects.add(effect);
+  state.blockedSources.add(source.key);
   return { blocked: true, allowStall: false, turns: after };
 }
 
@@ -197,11 +198,13 @@ export function raiseModifier(
       if (plan.wish) abort(`wish for ${source.effect}`);
 
       const result = applyGain(source, target, state, options);
+      // apply() already made any purchase, so charge it even if the source
+      // then granted nothing.
+      state.meatSpent += plan.meatCost;
       if (result.blocked) continue;
       if (result.allowStall) allowStall = true;
       if (result.turns >= target.minTurns) satisfiedThisTarget.add(source.effect);
       meatPerTurnUsed += plannedSpend;
-      state.meatSpent += plan.meatCost;
       appliedOne = true;
       break;
     }

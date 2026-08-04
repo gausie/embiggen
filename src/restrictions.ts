@@ -132,7 +132,7 @@ export function mutuallyExcluded(effect: Effect): boolean {
   return MUTUAL_EXCLUSION_SETS.some(
     (group) =>
       group.includes(effect) &&
-      sum(group, (member) => haveEffect(member)) > 0,
+      group.some((member) => member !== effect && haveEffect(member) > 0),
   );
 }
 

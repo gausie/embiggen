@@ -1,4 +1,4 @@
-import { Effect, Modifier } from "kolmafia";
+import { Item, Modifier, Skill } from "kolmafia";
 
 /** Default meat budget; also the sentinel for "the user didn't override it". */
 export const DEFAULT_MAX_MEAT = 100000;
@@ -30,9 +30,10 @@ export interface Target {
 
 export interface RunState {
   meatSpent: number;
-  blockedEffects: Set<Effect>;
+  /** Item/skill sources that granted nothing and shouldn't be retried this run. */
+  blockedSources: Set<Item | Skill>;
 }
 
 export function newRunState(): RunState {
-  return { meatSpent: 0, blockedEffects: new Set() };
+  return { meatSpent: 0, blockedSources: new Set() };
 }

@@ -58,6 +58,8 @@ export abstract class Source {
 
   abstract get baseCost(): number;
   abstract get description(): string;
+  /** The item or skill this source uses; identifies it for run-level blocking. */
+  abstract get key(): Item | Skill;
   abstract plan(
     options: GainOptions,
     state: RunState,
@@ -97,6 +99,10 @@ class ItemSource extends Source {
 
   get description(): string {
     return `Item ${this.item}: ${this.turnsPerUse} turns of ${this.effect}`;
+  }
+
+  get key(): Item {
+    return this.item;
   }
 
   get baseCost(): number {
@@ -163,6 +169,10 @@ class SkillSource extends Source {
 
   get description(): string {
     return `Skill ${this.skill}: ${this.turnsPerUse} turns of ${this.effect}`;
+  }
+
+  get key(): Skill {
+    return this.skill;
   }
 
   get baseCost(): number {
