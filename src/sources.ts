@@ -221,27 +221,24 @@ class SkillSource extends Source {
     return { meatCost: 0, wish: false };
   }
 
-  apply(amount: number): void {
-    let castable = 10;
-    if (hpCost(this.skill) > 0) {
-      castable = Math.min(
-        castable,
-        Math.max(1, Math.floor((myHp() - 1) / hpCost(this.skill))),
-      );
-    }
-    if (soulsauceCost(this.skill) > 0) {
-      castable = Math.min(
-        castable,
-        Math.max(1, Math.floor((mySoulsauce() - 1) / soulsauceCost(this.skill))),
-      );
-    }
+  /** How many casts our HP and soulsauce pools allow right now (capped at 10). */
+  private get affordableCasts(): number {
+    const limit = (cost: number, pool: number) =>
+      cost > 0 ? Math.max(1, Math.floor((pool - 1) / cost)) : 10;
+    return Math.min(
+      10,
+      limit(hpCost(this.skill), myHp()),
+      limit(soulsauceCost(this.skill), mySoulsauce()),
+    );
+  }
 
+  apply(amount: number): void {
     const needGlove =
       CHEAT_CODES.has(this.skill) && !haveEquipped($item`Powerful Glove`);
     const saved = needGlove ? equippedItem($slot`acc1`) : null;
     if (needGlove) equip($slot`acc1`, $item`Powerful Glove`);
 
-    useSkill(Math.min(castable, amount), this.skill);
+    useSkill(Math.min(this.affordableCasts, amount), this.skill);
 
     if (saved && saved !== $item`none`) equip($slot`acc1`, saved);
   }
