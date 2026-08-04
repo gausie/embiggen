@@ -1,6 +1,5 @@
 import {
   abort,
-  cliExecute,
   Effect,
   familiarWeight,
   haveEffect,
@@ -12,6 +11,7 @@ import {
   numericModifier,
   print,
   printHtml,
+  refreshStatus,
 } from "kolmafia";
 import { $modifier, $stat, clamp, get } from "libram";
 import { effectiveModifier } from "./modifiers";
@@ -130,8 +130,8 @@ function applyGain(
   }
 
   // A source can silently grant zero turns (spent consumable, unavailable
-  // skill, exhausted limited buff); refresh effects in case mafia is behind.
-  cliExecute("refresh effects");
+  // skill, exhausted limited buff); resync with KoL in case mafia is behind.
+  refreshStatus();
   after = haveEffect(effect);
   if (after !== before) {
     return { blocked: false, allowStall: false, turns: after };
