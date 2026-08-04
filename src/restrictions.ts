@@ -25,11 +25,6 @@ export const FIXED_BLOCKED_EFFECTS = new Set(
   $effects`Cowrruption, Visions of the Deep Dark Deeps`,
 );
 
-/** Effects that can only be gained a limited number of times; skip once exhausted. */
-export const LIMITED_EFFECTS = new Set(
-  $effects`Blessing of your favorite Bird, Blessing of the Bird, Triple-Sized, Invisible Avatar`,
-);
-
 export const CHEAT_CODES = new Set(
   $skills`CHEAT CODE: Triple Size, CHEAT CODE: Invisible Avatar`,
 );

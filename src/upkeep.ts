@@ -19,7 +19,6 @@ import { GainOptions, RunState, Target } from "./options";
 import {
   FIXED_BLOCKED_EFFECTS,
   isSongEffect,
-  LIMITED_EFFECTS,
   mutuallyExcluded,
   Restrictions,
   songSlotsFull,
@@ -110,7 +109,12 @@ interface GainResult {
 }
 
 /** Apply `source`, confirming it actually granted turns, and report the outcome. */
-function applyGain(source: Source, target: Target, state: RunState): GainResult {
+function applyGain(
+  source: Source,
+  target: Target,
+  state: RunState,
+  options: GainOptions,
+): GainResult {
   const { effect } = source;
   const before = haveEffect(effect);
   const amount = clamp(
@@ -125,17 +129,20 @@ function applyGain(source: Source, target: Target, state: RunState): GainResult 
     return { blocked: false, allowStall: before !== 0 && after < 1000, turns: after };
   }
 
-  // A source can silently grant zero turns (e.g. spent future drugs); confirm.
+  // A source can silently grant zero turns (spent consumable, unavailable
+  // skill, exhausted limited buff); refresh in case mafia is behind.
   cliExecute("refresh status");
   after = haveEffect(effect);
   if (after !== before) {
     return { blocked: false, allowStall: false, turns: after };
   }
-  if (LIMITED_EFFECTS.has(effect) || source.songLike) {
-    state.blockedEffects.add(effect);
-    return { blocked: true, allowStall: false, turns: after };
+
+  // Still nothing gained: block this effect and move on rather than aborting.
+  if (!options.silent) {
+    printHtml(`${source.description} gained no turns; skipping it.`);
   }
-  abort(`Mafia bug: ${source.description} did not gain any turns.`);
+  state.blockedEffects.add(effect);
+  return { blocked: true, allowStall: false, turns: after };
 }
 
 /** Apply effect sources until `target` is met (or we run out of affordable options). */
@@ -200,7 +207,7 @@ export function raiseModifier(
       if (!options.silent) printHtml(`${source.description}: ${efficiency} efficiency`);
       if (plan.wish) abort(`wish for ${source.effect}`);
 
-      const result = applyGain(source, target, state);
+      const result = applyGain(source, target, state, options);
       if (result.blocked) continue;
       if (result.allowStall) allowStall = true;
       if (result.turns >= target.minTurns) satisfiedThisTarget.add(source.effect);

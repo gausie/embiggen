@@ -58,7 +58,6 @@ export abstract class Source {
 
   abstract get baseCost(): number;
   abstract get description(): string;
-  abstract get songLike(): boolean;
   abstract plan(
     options: GainOptions,
     state: RunState,
@@ -98,10 +97,6 @@ class ItemSource extends Source {
 
   get description(): string {
     return `Item ${this.item}: ${this.turnsPerUse} turns of ${this.effect}`;
-  }
-
-  get songLike(): boolean {
-    return false;
   }
 
   get baseCost(): number {
@@ -168,10 +163,6 @@ class SkillSource extends Source {
 
   get description(): string {
     return `Skill ${this.skill}: ${this.turnsPerUse} turns of ${this.effect}`;
-  }
-
-  get songLike(): boolean {
-    return this.skill.class === $class`Accordion Thief`;
   }
 
   get baseCost(): number {
