@@ -70,46 +70,50 @@ export interface Restrictions {
   blockedItems: Set<Item>;
 }
 
-export function buildRestrictions(options: GainOptions): Restrictions {
-  const blockedSkills = new Set<Skill>();
-  const blockedItems = new Set<Item>();
+const ALWAYS_BLOCKED_SKILLS = $skills`Drench Yourself in Sweat, Spirit of Peppermint, Spirit of Cayenne, Spirit of Garlic, Spirit of Wormwood, Spirit of Bacon Grease`;
 
-  if (myClass() === $class`Turtle Tamer`) {
-    for (const skill of BLESSINGS) blockedSkills.add(skill);
-  } else if (myClass() === $class`Pastamancer`) {
-    for (const thrall of Thrall.all()) {
-      if (thrall.skill !== $skill`none`) blockedSkills.add(thrall.skill);
-    }
+// Items mafia can't acquire cleanly, or that we simply never want to use.
+const UNWANTED_ITEMS = $items`M-242, snake, sparkler, Mer-kin strongjuice, Mer-kin smartjuice, Mer-kin cooljuice, pirate tract, pirate pamphlet, pirate brochure, elven suicide capsule, Ghost Dog Chow, Yummy Tummy bean`;
+
+/** Skills whose buffs clash with our own class kit, so gaining them would bounce. */
+function classConflictSkills(): Skill[] {
+  if (myClass() === $class`Turtle Tamer`) return [...BLESSINGS];
+  if (myClass() === $class`Pastamancer`) {
+    return Thrall.all()
+      .map((thrall) => thrall.skill)
+      .filter((skill) => skill !== $skill`none`);
   }
+  return [];
+}
 
-  for (const skill of $skills`Drench Yourself in Sweat, Spirit of Peppermint, Spirit of Cayenne, Spirit of Garlic, Spirit of Wormwood, Spirit of Bacon Grease`) {
-    blockedSkills.add(skill);
-  }
+/** Heartstone skills the player hasn't unlocked. */
+function lockedHeartstoneSkills(): Skill[] {
+  return HEARTSTONE_SKILLS.filter(
+    ([skill, pref]) => skill !== $skill`none` && !get(pref, false),
+  ).map(([skill]) => skill);
+}
 
-  for (const [skill, pref] of HEARTSTONE_SKILLS) {
-    if (skill !== $skill`none` && !get(pref, false)) blockedSkills.add(skill);
-  }
+/** Skills with a per-day cap, treated as limited buffs and skipped by default. */
+function dailyLimitedSkills(): Skill[] {
+  return Skill.all().filter(
+    (skill) => skill.dailylimit > 0 || skill.dailylimitpref !== "",
+  );
+}
 
-  // Skills with a daily cap are treated as "limited buffs" and skipped by default.
-  if (!options.allowLimitedBuffs) {
-    for (const skill of Skill.all()) {
-      if (skill.dailylimit > 0 || skill.dailylimitpref !== "") {
-        blockedSkills.add(skill);
-      }
-    }
-  }
-
-  // Crystallized pumpkin spice is only worthwhile in autumn (Sep–Nov).
+/** Crystallized pumpkin spice is only worth using in autumn (Sep–Nov). */
+function outOfSeasonItems(): Item[] {
   const month = Number(todayToString().slice(4, 6));
-  if (month < 9 || month > 11) {
-    blockedItems.add($item`crystallized pumpkin spice`);
-  }
+  return month < 9 || month > 11 ? [$item`crystallized pumpkin spice`] : [];
+}
 
-  // Items mafia can't acquire cleanly, or that we simply never want to use.
-  for (const item of $items`M-242, snake, sparkler, Mer-kin strongjuice, Mer-kin smartjuice, Mer-kin cooljuice, pirate tract, pirate pamphlet, pirate brochure, elven suicide capsule, Ghost Dog Chow, Yummy Tummy bean`) {
-    blockedItems.add(item);
-  }
-
+export function buildRestrictions(options: GainOptions): Restrictions {
+  const blockedSkills = new Set<Skill>([
+    ...classConflictSkills(),
+    ...ALWAYS_BLOCKED_SKILLS,
+    ...lockedHeartstoneSkills(),
+    ...(options.allowLimitedBuffs ? [] : dailyLimitedSkills()),
+  ]);
+  const blockedItems = new Set<Item>([...outOfSeasonItems(), ...UNWANTED_ITEMS]);
   return { blockedSkills, blockedItems };
 }
 

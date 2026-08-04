@@ -27,15 +27,18 @@ const SHOWN_AS_PERCENT = new Set(
   $modifiers`Combat Rate, Initiative, Item Drop, Meat Drop`,
 );
 
+/** Expand an abbreviation to a canonical name mafia can resolve ("cold res" -> "cold resistance"). */
+function expandAbbreviation(phrase: string): string {
+  return ALIASES[phrase] ?? phrase.replace(/\bres\b/, "resistance");
+}
+
 /** Turn one user phrase into the modifier(s) it names, or nothing if unrecognised. */
 function resolveModifiers(phrase: string): Modifier[] {
   phrase = phrase.toLowerCase();
   if (phrase === "all res") return [...ALL_RESISTANCES];
   if (phrase === "mainstat") phrase = myPrimestat().toString().toLowerCase();
 
-  // "cold res" -> "cold resistance"; everything canonical mafia resolves itself.
-  const name = ALIASES[phrase] ?? phrase.replace(/\bres\b/, "resistance");
-  const modifier = Modifier.get(name);
+  const modifier = Modifier.get(expandAbbreviation(phrase));
   return modifier === Modifier.none ? [] : [modifier];
 }
 
