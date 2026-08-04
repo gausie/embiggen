@@ -247,6 +247,47 @@ class SkillSource extends Source {
   }
 }
 
+/** Path- and progress-dependent state that decides which sources are even candidates. */
+interface CandidateContext {
+  inGLover: boolean;
+  inNuclearAutumn: boolean;
+  inRonin: boolean;
+  blockedItems: Set<Item>;
+}
+
+function hasG(name: string): boolean {
+  return name.toLowerCase().includes("g");
+}
+
+function isCandidateItem(
+  item: Item,
+  effect: Effect,
+  ctx: CandidateContext,
+): boolean {
+  // In ronin we can only use what we own or can craft without spending a turn.
+  if (ctx.inRonin && availableAmount(item) + creatableAmount(item) === 0) {
+    return false;
+  }
+  if (
+    ctx.inRonin &&
+    availableAmount(item) === 0 &&
+    creatableAmount(item) !== 0 &&
+    craftType(item).includes("Cooking (fancy)")
+  ) {
+    return false;
+  }
+  if (ctx.blockedItems.has(item)) return false;
+  if (HOLO_RECORDS.has(item) && !ctx.inNuclearAutumn) return false;
+  if (item.fullness > 0 || item.inebriety > 0 || item.spleen > 0) return false;
+  // G-Lover may only touch items and effects whose names contain a "g".
+  if (ctx.inGLover && (!hasG(item.name) || !hasG(effect.name))) return false;
+  return true;
+}
+
+function isCandidateSkill(skill: Skill, ctx: CandidateContext): boolean {
+  return !ctx.inGLover || hasG(skill.name);
+}
+
 /** Every item/skill that pushes `target`'s modifier in the desired direction. */
 export function sourcesFor(
   target: Target,
@@ -257,10 +298,12 @@ export function sourcesFor(
 
   const wantPositive = target.value >= 0;
   const path = myPath().name;
-  const inGLover = path === "G-Lover";
-  const inNuclearAutumn = path === "Nuclear Autumn";
-  const inRonin = !canInteract();
-  const hasG = (name: string) => name.toLowerCase().includes("g");
+  const context: CandidateContext = {
+    inGLover: path === "G-Lover",
+    inNuclearAutumn: path === "Nuclear Autumn",
+    inRonin: !canInteract(),
+    blockedItems: restrictions.blockedItems,
+  };
 
   const effects = Effect.all().filter((effect) => {
     const value = effectiveModifier(effect, target.modifier, options);
@@ -270,27 +313,14 @@ export function sourcesFor(
   const sources: Source[] = [];
   for (const effect of effects) {
     for (const item of itemsGranting(effect)) {
-      if (inRonin && availableAmount(item) + creatableAmount(item) === 0) {
-        continue;
+      if (isCandidateItem(item, effect, context)) {
+        sources.push(new ItemSource(effect, item));
       }
-      if (
-        inRonin &&
-        availableAmount(item) === 0 &&
-        creatableAmount(item) !== 0 &&
-        craftType(item).includes("Cooking (fancy)")
-      ) {
-        continue;
-      }
-      if (restrictions.blockedItems.has(item)) continue;
-      if (HOLO_RECORDS.has(item) && !inNuclearAutumn) continue;
-      if (item.fullness > 0 || item.inebriety > 0 || item.spleen > 0) continue;
-      if (inGLover && (!hasG(item.name) || !hasG(effect.name))) continue;
-      sources.push(new ItemSource(effect, item));
     }
-
     for (const skill of skillsGranting(effect)) {
-      if (inGLover && !hasG(skill.name)) continue;
-      sources.push(new SkillSource(effect, skill));
+      if (isCandidateSkill(skill, context)) {
+        sources.push(new SkillSource(effect, skill));
+      }
     }
   }
   return sources;
