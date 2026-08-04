@@ -52,6 +52,26 @@ function satisfied(target: Target, value: number): boolean {
   return target.value >= 0 ? target.value <= value : target.value >= value;
 }
 
+/** The purely effect-level reasons to skip a source this iteration. */
+function effectSkippable(
+  source: Source,
+  target: Target,
+  options: GainOptions,
+  state: RunState,
+  satisfiedThisTarget: Set<Effect>,
+): boolean {
+  const { effect } = source;
+  return (
+    state.blockedEffects.has(effect) ||
+    FIXED_BLOCKED_EFFECTS.has(effect) ||
+    satisfiedThisTarget.has(effect) ||
+    (isSongEffect(effect) && haveEffect(effect) === 0 && songSlotsFull()) ||
+    mutuallyExcluded(effect) ||
+    haveEffect(effect) >= target.minTurns ||
+    effectiveModifier(effect, target.modifier, options) === 0
+  );
+}
+
 function bestFirst(
   sources: Source[],
   target: Target,
@@ -106,25 +126,17 @@ export function raiseModifier(
     let appliedOne = false;
     for (const source of ordered) {
       const { effect } = source;
-      if (state.blockedEffects.has(effect)) continue;
-      if (FIXED_BLOCKED_EFFECTS.has(effect)) continue;
-      if (satisfiedThisTarget.has(effect)) continue;
+      if (effectSkippable(source, target, options, state, satisfiedThisTarget)) {
+        continue;
+      }
 
       const plan = source.plan(options, state, restrictions, canAccessMall);
       if (!plan) continue;
-
-      if (isSongEffect(effect) && haveEffect(effect) === 0 && songSlotsFull()) {
-        continue;
-      }
-      if (mutuallyExcluded(effect)) continue;
-      if (effectiveModifier(effect, target.modifier, options) === 0) continue;
 
       // Check the shared per-turn meat budget now, but only spend it once we commit below.
       const plannedSpend =
         target.meatPerTurnLimit > 0 ? source.meatPerTurn() : 0;
       if (plannedSpend + meatPerTurnUsed > target.meatPerTurnLimit) continue;
-
-      if (haveEffect(effect) >= target.minTurns) continue;
 
       const efficiency = source.efficiency(target, options);
       if (target.maxEfficiency !== null && Math.abs(efficiency) > target.maxEfficiency) {
