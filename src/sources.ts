@@ -128,7 +128,7 @@ class ItemSource extends Source {
     restrictions: Restrictions,
     canAccessMall: boolean,
   ): UsePlan | null {
-    if (restrictions.blockedItems.has(this.item)) return null;
+    // sourcesFor already excludes blocked items, so no need to re-check here.
     const owned = availableAmount(this.item);
     if (!this.item.tradeable && owned === 0) return null;
     if (owned === 0 && !canAccessMall) return null;
