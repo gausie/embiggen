@@ -12,8 +12,14 @@ export function main(input: string): void {
     return;
   }
 
-  const { targets, minTurns, maxEfficiency, meatSpendPerTurnLimit, options } =
-    parseCommand(input);
+  const {
+    targets,
+    unrecognised,
+    minTurns,
+    maxEfficiency,
+    meatSpendPerTurnLimit,
+    options,
+  } = parseCommand(input);
 
   if (!options.silent) {
     printHtml(`Gain v${VERSION}`);
@@ -27,6 +33,17 @@ export function main(input: string): void {
     if (!canInteract()) {
       printHtml("We're not in ronin, so we might break. I didn't test for this.");
     }
+  }
+
+  // Fail fast: a misunderstood modifier means the whole command is suspect, so
+  // report it and buff nothing rather than silently half-applying.
+  if (unrecognised.length > 0) {
+    if (!options.silent) {
+      for (const phrase of unrecognised) {
+        printHtml(`Did not recognise modifier "${phrase}".`);
+      }
+    }
+    return;
   }
 
   if (targets.length === 0) {

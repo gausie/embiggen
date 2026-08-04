@@ -49,6 +49,7 @@ export interface ResolvedTarget {
 
 export interface ParsedCommand {
   targets: ResolvedTarget[];
+  unrecognised: string[];
   minTurns: number;
   maxEfficiency: number | null;
   meatSpendPerTurnLimit: number;
@@ -57,6 +58,7 @@ export interface ParsedCommand {
 
 function addTargets(
   targets: ResolvedTarget[],
+  unrecognised: string[],
   phrase: string,
   value: number,
   options: GainOptions,
@@ -67,13 +69,21 @@ function addTargets(
     phrase = "combat";
   }
 
+  // Validate the modifier before touching any state, so a typo can't silently
+  // tighten the meat budget or half-apply a command.
+  const modifiers = resolveModifiers(phrase);
+  if (modifiers.length === 0) {
+    unrecognised.push(phrase);
+    return;
+  }
+
   // A bare modifier with no number means "as much as possible" on a tight budget.
   if (value === 0) {
     value = 1000000;
     options.maxMeatToSpend = 10000;
   }
 
-  for (const modifier of resolveModifiers(phrase)) {
+  for (const modifier of modifiers) {
     targets.push({ modifier, value });
   }
 }
@@ -81,6 +91,7 @@ function addTargets(
 export function parseCommand(input: string): ParsedCommand {
   const options = defaultOptions();
   const targets: ResolvedTarget[] = [];
+  const unrecognised: string[] = [];
   let minTurns = 1;
   let maxEfficiency: number | null = null;
   let meatSpendPerTurnLimit = 0;
@@ -133,7 +144,7 @@ export function parseCommand(input: string): ParsedCommand {
     const numeric = parseNumber(token);
     if (numeric !== null) {
       if (currentModifier !== "") {
-        addTargets(targets, currentModifier, pendingValue, options);
+        addTargets(targets, unrecognised, currentModifier, pendingValue, options);
         currentModifier = "";
       }
       pendingValue = numeric;
@@ -144,10 +155,17 @@ export function parseCommand(input: string): ParsedCommand {
   }
 
   if (currentModifier !== "") {
-    addTargets(targets, currentModifier, pendingValue, options);
+    addTargets(targets, unrecognised, currentModifier, pendingValue, options);
   }
 
-  return { targets, minTurns, maxEfficiency, meatSpendPerTurnLimit, options };
+  return {
+    targets,
+    unrecognised,
+    minTurns,
+    maxEfficiency,
+    meatSpendPerTurnLimit,
+    options,
+  };
 }
 
 export function describeGoals(targets: ResolvedTarget[], minTurns: number): string {
