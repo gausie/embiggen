@@ -12,7 +12,7 @@ import {
   print,
   printHtml,
 } from "kolmafia";
-import { $stat, get } from "libram";
+import { $stat, clamp, get } from "libram";
 import { effectiveModifier } from "./modifiers";
 import { GainOptions, RunState, Target } from "./options";
 import {
@@ -61,29 +61,21 @@ function effectSkippable(
   satisfiedThisTarget: Set<Effect>,
 ): boolean {
   const { effect } = source;
+  const active = haveEffect(effect);
   return (
     state.blockedEffects.has(effect) ||
     FIXED_BLOCKED_EFFECTS.has(effect) ||
     satisfiedThisTarget.has(effect) ||
-    (isSongEffect(effect) && haveEffect(effect) === 0 && songSlotsFull()) ||
+    (isSongEffect(effect) && active === 0 && songSlotsFull()) ||
     mutuallyExcluded(effect) ||
-    haveEffect(effect) >= target.minTurns ||
+    active >= target.minTurns ||
     effectiveModifier(effect, target.modifier, options) === 0
   );
 }
 
-function bestFirst(
-  sources: Source[],
-  target: Target,
-  options: GainOptions,
-  wantPositive: boolean,
-): Source[] {
-  return sources
-    .map((source) => ({ source, efficiency: source.efficiency(target, options) }))
-    .sort((a, b) =>
-      wantPositive ? a.efficiency - b.efficiency : b.efficiency - a.efficiency,
-    )
-    .map((scored) => scored.source);
+interface Scored {
+  source: Source;
+  efficiency: number;
 }
 
 /** Apply effect sources until `target` is met (or we run out of affordable options). */
@@ -97,6 +89,9 @@ export function raiseModifier(
   const canAccessMall = get("autoSatisfyWithMall", false);
   const candidates = sourcesFor(target, options, restrictions);
 
+  const byEfficiency = (a: Scored, b: Scored) =>
+    wantPositive ? a.efficiency - b.efficiency : b.efficiency - a.efficiency;
+
   const satisfiedThisTarget = new Set<Effect>();
   let meatPerTurnUsed = 0;
   let lastValue: number | null = null;
@@ -106,7 +101,7 @@ export function raiseModifier(
     const value = currentValue(target.modifier);
     if (satisfied(target, value)) return;
 
-    if (lastValue === value && !allowStall && target.modifier !== "any") {
+    if (lastValue === value && !allowStall) {
       print(
         `Stopping trying to gain a buff. Value of modifier ${target.modifier} is ${value}, same as the previous loop.`,
         "red",
@@ -116,21 +111,27 @@ export function raiseModifier(
     allowStall = false;
     lastValue = value;
 
-    // Warm up mall prices for the front-runners, then re-rank with real prices.
-    let ordered = bestFirst(candidates, target, options, wantPositive);
-    for (const source of ordered.slice(0, PREWARM_COUNT)) {
-      source.warmPrice(canAccessMall);
+    // Rank once, warm mall prices for the front-runners, then re-score just those.
+    const ranked: Scored[] = candidates.map((source) => ({
+      source,
+      efficiency: source.efficiency(target, options),
+    }));
+    ranked.sort(byEfficiency);
+    const frontRunners = ranked.slice(0, PREWARM_COUNT);
+    for (const { source } of frontRunners) source.warmPrice(canAccessMall);
+    for (const entry of frontRunners) {
+      entry.efficiency = entry.source.efficiency(target, options);
     }
-    ordered = bestFirst(candidates, target, options, wantPositive);
+    ranked.sort(byEfficiency);
 
     let appliedOne = false;
-    for (const source of ordered) {
+    for (const { source, efficiency } of ranked) {
       const { effect } = source;
       if (effectSkippable(source, target, options, state, satisfiedThisTarget)) {
         continue;
       }
 
-      const plan = source.plan(options, state, restrictions, canAccessMall);
+      const plan = source.plan(options, state, canAccessMall);
       if (!plan) continue;
 
       // Check the shared per-turn meat budget now, but only spend it once we commit below.
@@ -138,7 +139,6 @@ export function raiseModifier(
         target.meatPerTurnLimit > 0 ? source.meatPerTurn() : 0;
       if (plannedSpend + meatPerTurnUsed > target.meatPerTurnLimit) continue;
 
-      const efficiency = source.efficiency(target, options);
       if (target.maxEfficiency !== null && Math.abs(efficiency) > target.maxEfficiency) {
         break;
       }
@@ -147,9 +147,10 @@ export function raiseModifier(
       if (plan.wish) abort(`wish for ${effect}`);
 
       const before = haveEffect(effect);
-      const amount = Math.min(
+      const amount = clamp(
+        Math.ceil((target.minTurns - before) / Math.max(1, source.turnsPerUse)),
+        1,
         10,
-        Math.max(1, Math.ceil((target.minTurns - before) / Math.max(1, source.turnsPerUse))),
       );
       source.apply(amount);
 

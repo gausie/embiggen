@@ -9,7 +9,6 @@ import {
   equip,
   equippedItem,
   haveEquipped,
-  haveSkill,
   historicalPrice,
   hpCost,
   isUnrestricted,
@@ -30,7 +29,7 @@ import {
   use,
   useSkill,
 } from "kolmafia";
-import { $class, $effect, $item, $items, $slot } from "libram";
+import { $class, $effect, $item, $items, $slot, have } from "libram";
 import { effectiveModifier } from "./modifiers";
 import { GainOptions, RunState, Target } from "./options";
 import {
@@ -63,7 +62,6 @@ export abstract class Source {
   abstract plan(
     options: GainOptions,
     state: RunState,
-    restrictions: Restrictions,
     canAccessMall: boolean,
   ): UsePlan | null;
   abstract apply(amount: number): void;
@@ -125,10 +123,8 @@ class ItemSource extends Source {
   plan(
     options: GainOptions,
     state: RunState,
-    restrictions: Restrictions,
     canAccessMall: boolean,
   ): UsePlan | null {
-    // sourcesFor already excludes blocked items, so no need to re-check here.
     const owned = availableAmount(this.item);
     if (!this.item.tradeable && owned === 0) return null;
     if (owned === 0 && !canAccessMall) return null;
@@ -185,11 +181,9 @@ class SkillSource extends Source {
   plan(
     _options: GainOptions,
     _state: RunState,
-    restrictions: Restrictions,
     _canAccessMall: boolean,
   ): UsePlan | null {
-    if (restrictions.blockedSkills.has(this.skill)) return null;
-    if (!haveSkill(this.skill) || !isUnrestricted(this.skill)) return null;
+    if (!have(this.skill) || !isUnrestricted(this.skill)) return null;
     if (advCost(this.skill) > 0) return null;
     if (mpCost(this.skill) > myMaxmp()) return null;
     if (hpCost(this.skill) >= myHp()) return null;
@@ -250,6 +244,7 @@ interface CandidateContext {
   inNuclearAutumn: boolean;
   inRonin: boolean;
   blockedItems: Set<Item>;
+  blockedSkills: Set<Skill>;
 }
 
 function hasG(name: string): boolean {
@@ -282,6 +277,7 @@ function isCandidateItem(
 }
 
 function isCandidateSkill(skill: Skill, ctx: CandidateContext): boolean {
+  if (ctx.blockedSkills.has(skill)) return false;
   return !ctx.inGLover || hasG(skill.name);
 }
 
@@ -300,6 +296,7 @@ export function sourcesFor(
     inNuclearAutumn: path === "Nuclear Autumn",
     inRonin: !canInteract(),
     blockedItems: restrictions.blockedItems,
+    blockedSkills: restrictions.blockedSkills,
   };
 
   const effects = Effect.all().filter((effect) => {
@@ -327,29 +324,24 @@ let itemIndex: Map<Effect, Item[]> | null = null;
 let skillIndex: Map<Effect, Skill[]> | null = null;
 
 function itemsGranting(effect: Effect): Item[] {
-  if (!itemIndex) {
-    itemIndex = new Map();
-    for (const item of Item.all()) {
-      const granted = effectModifier(item, "Effect");
-      if (granted !== $effect`none`) push(itemIndex, granted, item);
-    }
-  }
+  itemIndex ??= indexByEffect(Item.all(), (item) => effectModifier(item, "Effect"));
   return itemIndex.get(effect) ?? [];
 }
 
 function skillsGranting(effect: Effect): Skill[] {
-  if (!skillIndex) {
-    skillIndex = new Map();
-    for (const skill of Skill.all()) {
-      const granted = toEffect(skill);
-      if (granted !== $effect`none`) push(skillIndex, granted, skill);
-    }
-  }
+  skillIndex ??= indexByEffect(Skill.all(), (skill) => toEffect(skill));
   return skillIndex.get(effect) ?? [];
 }
 
-function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
-  const list = map.get(key);
-  if (list) list.push(value);
-  else map.set(key, [value]);
+/** Group things by the effect they grant, skipping those that grant nothing. */
+function indexByEffect<T>(things: T[], grantedBy: (thing: T) => Effect): Map<Effect, T[]> {
+  const index = new Map<Effect, T[]>();
+  for (const thing of things) {
+    const effect = grantedBy(thing);
+    if (effect === $effect`none`) continue;
+    const list = index.get(effect);
+    if (list) list.push(thing);
+    else index.set(effect, [thing]);
+  }
+  return index;
 }

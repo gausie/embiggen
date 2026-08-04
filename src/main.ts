@@ -93,7 +93,7 @@ export function main(input: string): void {
 
   for (const raw of targets) {
     const target: Target = {
-      modifier: raw.modifier.toLowerCase(),
+      modifier: raw.modifier,
       value: raw.value,
       minTurns,
       reasonableTurns,

@@ -20,8 +20,6 @@ export function effectiveModifier(
   modifier: string,
   options: GainOptions,
 ): number {
-  if (eqi(modifier, "any")) return 1;
-
   let value = numericModifier(effect, modifier);
   if (options.ignorePercentages) return value;
 
