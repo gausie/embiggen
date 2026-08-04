@@ -130,8 +130,8 @@ function applyGain(
   }
 
   // A source can silently grant zero turns (spent consumable, unavailable
-  // skill, exhausted limited buff); refresh in case mafia is behind.
-  cliExecute("refresh status");
+  // skill, exhausted limited buff); refresh effects in case mafia is behind.
+  cliExecute("refresh effects");
   after = haveEffect(effect);
   if (after !== before) {
     return { blocked: false, allowStall: false, turns: after };
