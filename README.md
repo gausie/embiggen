@@ -1,5 +1,7 @@
 # embiggen
 
+![embiggen](assets/embiggen.png)
+
 Efficient buffing for KoLmafia. Given target modifier values, `embiggen` finds
 the cheapest combination of item and skill effect sources to reach them.
 
