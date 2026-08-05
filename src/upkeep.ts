@@ -14,6 +14,7 @@ import {
   refreshStatus,
 } from "kolmafia";
 import { $modifier, $stat, clamp, get } from "libram";
+
 import { GainOptions, RunState, Target } from "./options";
 import {
   FIXED_BLOCKED_EFFECTS,
@@ -186,8 +187,7 @@ export function raiseModifier(
       if (!plan) continue;
 
       // Check the shared per-turn meat budget now, but only spend it once we commit.
-      const plannedSpend =
-        target.meatPerTurnLimit > 0 ? source.meatPerTurn() : 0;
+      const plannedSpend = target.meatPerTurnLimit > 0 ? source.meatPerTurn() : 0;
       if (plannedSpend + meatPerTurnUsed > target.meatPerTurnLimit) continue;
 
       if (target.maxEfficiency !== null && Math.abs(efficiency) > target.maxEfficiency) {

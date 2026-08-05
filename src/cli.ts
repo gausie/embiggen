@@ -1,5 +1,6 @@
 import { Modifier, myPrimestat, printHtml } from "kolmafia";
 import { $modifiers } from "libram";
+
 import { defaultOptions, GainOptions } from "./options";
 import { parseNumber } from "./util";
 
@@ -23,9 +24,7 @@ const ALIASES: Record<string, string> = {
 const ALL_RESISTANCES = $modifiers`Cold Resistance, Hot Resistance, Sleaze Resistance, Stench Resistance, Spooky Resistance`;
 
 /** Modifiers conventionally displayed as percentages. */
-const SHOWN_AS_PERCENT = new Set(
-  $modifiers`Combat Rate, Initiative, Item Drop, Meat Drop`,
-);
+const SHOWN_AS_PERCENT = new Set($modifiers`Combat Rate, Initiative, Item Drop, Meat Drop`);
 
 /** Expand an abbreviation to a canonical name mafia can resolve ("cold res" -> "cold resistance"). */
 function expandAbbreviation(phrase: string): string {
@@ -149,8 +148,7 @@ export function parseCommand(input: string): ParsedCommand {
       }
       pendingValue = numeric;
     } else {
-      currentModifier =
-        currentModifier === "" ? token : `${currentModifier} ${token}`;
+      currentModifier = currentModifier === "" ? token : `${currentModifier} ${token}`;
     }
   }
 

@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import { $modifier, $modifiers } from "libram";
+import { describe, expect, it } from "vitest";
 
 import { parseCommand } from "../src/cli";
 

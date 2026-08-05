@@ -8,26 +8,13 @@ import {
   toEffect,
   todayToString,
 } from "kolmafia";
-import {
-  $class,
-  $effects,
-  $item,
-  $items,
-  $skill,
-  $skills,
-  get,
-  have,
-  sum,
-} from "libram";
+import { $class, $effects, $item, $items, $skill, $skills, get, have, sum } from "libram";
+
 import { GainOptions } from "./options";
 
-export const FIXED_BLOCKED_EFFECTS = new Set(
-  $effects`Cowrruption, Visions of the Deep Dark Deeps`,
-);
+export const FIXED_BLOCKED_EFFECTS = new Set($effects`Cowrruption, Visions of the Deep Dark Deeps`);
 
-export const CHEAT_CODES = new Set(
-  $skills`CHEAT CODE: Triple Size, CHEAT CODE: Invisible Avatar`,
-);
+export const CHEAT_CODES = new Set($skills`CHEAT CODE: Triple Size, CHEAT CODE: Invisible Avatar`);
 
 const BLESSINGS = new Set(
   $skills`Blessing of the Storm Tortoise, Blessing of She-Who-Was, Blessing of the War Snapper`,
@@ -93,9 +80,7 @@ function lockedHeartstoneSkills(): Skill[] {
 
 /** Skills with a per-day cap, treated as limited buffs and skipped by default. */
 function dailyLimitedSkills(): Skill[] {
-  return Skill.all().filter(
-    (skill) => skill.dailylimit > 0 || skill.dailylimitpref !== "",
-  );
+  return Skill.all().filter((skill) => skill.dailylimit > 0 || skill.dailylimitpref !== "");
 }
 
 /** Crystallized pumpkin spice is only worth using in autumn (Sep–Nov). */
@@ -121,9 +106,7 @@ export function isSongEffect(effect: Effect): boolean {
 
 export function songSlotsFull(): boolean {
   const limit = have($skill`Mariachi Memory`) ? 4 : 3;
-  const active = sum([...SONG_EFFECTS], (effect) =>
-    haveEffect(effect) > 0 ? 1 : 0,
-  );
+  const active = sum([...SONG_EFFECTS], (effect) => (haveEffect(effect) > 0 ? 1 : 0));
   return active >= limit;
 }
 
@@ -131,8 +114,7 @@ export function songSlotsFull(): boolean {
 export function mutuallyExcluded(effect: Effect): boolean {
   return MUTUAL_EXCLUSION_SETS.some(
     (group) =>
-      group.includes(effect) &&
-      group.some((member) => member !== effect && haveEffect(member) > 0),
+      group.includes(effect) && group.some((member) => member !== effect && haveEffect(member) > 0),
   );
 }
 

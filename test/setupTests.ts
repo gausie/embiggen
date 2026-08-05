@@ -57,9 +57,7 @@ for (const [key, value] of Object.entries(kolmafia)) {
   vi.mocked(mockedClass.all).mockImplementation(() => knownInstances[key]);
 }
 
-vi.mocked(kolmafia).myPrimestat.mockImplementation(() =>
-  kolmafia.Stat.get("Muscle"),
-);
+vi.mocked(kolmafia).myPrimestat.mockImplementation(() => kolmafia.Stat.get("Muscle"));
 vi.mocked(kolmafia).print.mockImplementation(() => undefined);
 vi.mocked(kolmafia).printHtml.mockImplementation(() => undefined);
 

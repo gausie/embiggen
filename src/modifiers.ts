@@ -1,5 +1,6 @@
 import { Effect, Modifier, myBasestat, numericModifier, Stat } from "kolmafia";
 import { $modifier, $stat } from "libram";
+
 import { GainOptions } from "./options";
 
 function activeBasestat(stat: Stat): number {

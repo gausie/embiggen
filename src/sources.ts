@@ -30,6 +30,7 @@ import {
   useSkill,
 } from "kolmafia";
 import { $class, $effect, $item, $items, $slot, have } from "libram";
+
 import { effectiveModifier } from "./modifiers";
 import { GainOptions, RunState, Target } from "./options";
 import {
@@ -60,11 +61,7 @@ export abstract class Source {
   abstract get description(): string;
   /** The item or skill this source uses; identifies it for run-level blocking. */
   abstract get key(): Item | Skill;
-  abstract plan(
-    options: GainOptions,
-    state: RunState,
-    canAccessMall: boolean,
-  ): UsePlan | null;
+  abstract plan(options: GainOptions, state: RunState, canAccessMall: boolean): UsePlan | null;
   abstract apply(amount: number): void;
 
   warmPrice(_canAccessMall: boolean): void {
@@ -121,11 +118,7 @@ class ItemSource extends Source {
     if (this.item.tradeable && canAccessMall) mallPrice(this.item);
   }
 
-  plan(
-    options: GainOptions,
-    state: RunState,
-    canAccessMall: boolean,
-  ): UsePlan | null {
+  plan(options: GainOptions, state: RunState, canAccessMall: boolean): UsePlan | null {
     const owned = availableAmount(this.item);
     if (!this.item.tradeable && owned === 0) return null;
     if (owned === 0 && !canAccessMall) return null;
@@ -179,37 +172,23 @@ class SkillSource extends Source {
     return mpCost(this.skill) * 2;
   }
 
-  plan(
-    _options: GainOptions,
-    _state: RunState,
-    _canAccessMall: boolean,
-  ): UsePlan | null {
+  plan(_options: GainOptions, _state: RunState, _canAccessMall: boolean): UsePlan | null {
     if (!have(this.skill) || !isUnrestricted(this.skill)) return null;
     if (advCost(this.skill) > 0) return null;
     if (mpCost(this.skill) > myMaxmp()) return null;
     if (hpCost(this.skill) >= myHp()) return null;
     if (soulsauceCost(this.skill) > mySoulsauce()) return null;
 
-    if (
-      RICHIE_SONGS.has(this.skill) &&
-      (myClass() !== $class`Accordion Thief` || myLevel() < 15)
-    ) {
+    if (RICHIE_SONGS.has(this.skill) && (myClass() !== $class`Accordion Thief` || myLevel() < 15)) {
       return null;
     }
 
     // Don't recast a blessing while a rival blessing is active — they bounce.
-    if (
-      isBlessing(this.skill) &&
-      myClass() !== $class`Turtle Tamer` &&
-      anyDisdainActive()
-    ) {
+    if (isBlessing(this.skill) && myClass() !== $class`Turtle Tamer` && anyDisdainActive()) {
       return null;
     }
 
-    if (
-      CHEAT_CODES.has(this.skill) &&
-      availableAmount($item`Powerful Glove`) === 0
-    ) {
+    if (CHEAT_CODES.has(this.skill) && availableAmount($item`Powerful Glove`) === 0) {
       return null;
     }
 
@@ -228,8 +207,7 @@ class SkillSource extends Source {
   }
 
   apply(amount: number): void {
-    const needGlove =
-      CHEAT_CODES.has(this.skill) && !haveEquipped($item`Powerful Glove`);
+    const needGlove = CHEAT_CODES.has(this.skill) && !haveEquipped($item`Powerful Glove`);
     const saved = needGlove ? equippedItem($slot`acc1`) : null;
     if (needGlove) equip($slot`acc1`, $item`Powerful Glove`);
 
@@ -252,11 +230,7 @@ function hasG(name: string): boolean {
   return name.toLowerCase().includes("g");
 }
 
-function isCandidateItem(
-  item: Item,
-  effect: Effect,
-  ctx: CandidateContext,
-): boolean {
+function isCandidateItem(item: Item, effect: Effect, ctx: CandidateContext): boolean {
   // In ronin we can only use what we own or can craft without spending a turn.
   if (ctx.inRonin && availableAmount(item) + creatableAmount(item) === 0) {
     return false;

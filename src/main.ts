@@ -1,4 +1,5 @@
 import { canInteract, myAdventures, printHtml } from "kolmafia";
+
 import { describeGoals, parseCommand, printUsage } from "./cli";
 import { DEFAULT_MAX_MEAT, newRunState, Target } from "./options";
 import { buildRestrictions } from "./restrictions";
@@ -12,14 +13,8 @@ export function main(input: string): void {
     return;
   }
 
-  const {
-    targets,
-    unrecognised,
-    minTurns,
-    maxEfficiency,
-    meatSpendPerTurnLimit,
-    options,
-  } = parseCommand(input);
+  const { targets, unrecognised, minTurns, maxEfficiency, meatSpendPerTurnLimit, options } =
+    parseCommand(input);
 
   if (!options.silent) {
     printHtml(`embiggen v${VERSION}`);
