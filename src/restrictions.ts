@@ -39,6 +39,13 @@ const MUTUAL_EXCLUSION_SETS = [
   $effects`Song of the North, Song of Slowness, Song of Starch, Song of Sauce, Song of Bravado`,
   $effects`Purple Tongue, Green Tongue, Orange Tongue, Red Tongue, Blue Tongue`,
   $effects`Broken Heart, Fiery Heart, Cold Hearted, Sweet Heart, Withered Heart, Lustful Heart`,
+  $effects`Bloody Potato Bits, Legendary Bloody Potato Bits`,
+  $effects`Slinking Noodle Glob, Legendary Slinking Noodle Glob`,
+  $effects`Whispering Strands, Legendary Whispering Strands`,
+  $effects`Macaroni Coating, Legendary Macaroni Coating`,
+  $effects`Penne Fedora, Legendary Penne Fedora`,
+  $effects`Pasta Eyeball, Legendary Pasta Eyeball`,
+  $effects`Spice Haze, Legendary Spice Haze`,
 ];
 
 const HEARTSTONE_SKILLS: [Skill, string][] = [
