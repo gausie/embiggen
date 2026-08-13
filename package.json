@@ -34,7 +34,7 @@
     "create-kolmafia-script": "^0.3.0",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-libram": "^0.5.3",
+    "eslint-plugin-libram": "^0.6.0",
     "jiti": "^2.6.1",
     "prettier": "^3.8.1",
     "rollup": "^4.57.1",
