@@ -54,9 +54,9 @@ function gainEffect(
     if (plan.wish) abort(`wish for ${effect}`);
 
     if (!options.silent) printHtml(`${source.description} x${uses}`);
-    source.apply(uses);
-    // The purchase has already happened, so charge for it however it went.
-    state.meatSpent += plan.meatCost;
+    // Charged on what was actually bought, and charged whether or not the
+    // effect then landed — the meat is gone either way.
+    state.meatSpent += source.apply(uses, plan);
 
     let after = haveEffect(effect);
     if (after === before) {

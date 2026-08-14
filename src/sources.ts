@@ -1,5 +1,6 @@
 import {
   advCost,
+  buy,
   availableAmount,
   canInteract,
   craftType,
@@ -23,13 +24,14 @@ import {
   mySoulsauce,
   numericModifier,
   Skill,
+  setProperty,
   soulsauceCost,
   toEffect,
   turnsPerCast,
   use,
   useSkill,
 } from "kolmafia";
-import { $class, $effect, $item, $items, $slot, clamp, have } from "libram";
+import { $class, $effect, $item, $items, $slot, clamp, get, have } from "libram";
 
 import { effectiveModifier } from "./modifiers";
 import { directionOf, GainOptions, RunState, Target } from "./options";
@@ -49,8 +51,32 @@ const HOLO_RECORDS = new Set(
 );
 
 export interface UsePlan {
+  /** Most this will cost: `unitPrice` for every copy we still have to buy. */
   meatCost: number;
+  /** Ceiling on what we'll pay per copy. */
+  unitPrice: number;
+  /** Copies we don't already own. */
+  toBuy: number;
   wish: boolean;
+}
+
+/**
+ * Run `action` with mall purchases switched off.
+ *
+ * `use` will otherwise top up whatever it is short of at whatever the mall is
+ * asking, which would walk straight past the price ceiling we just set.
+ */
+function withoutMallPurchases(action: () => void): void {
+  if (!get("autoSatisfyWithMall", false)) {
+    action();
+    return;
+  }
+  setProperty("autoSatisfyWithMall", "false");
+  try {
+    action();
+  } finally {
+    setProperty("autoSatisfyWithMall", "true");
+  }
 }
 
 /** A single way to gain an effect: either an item to use or a skill to cast. */
@@ -78,7 +104,8 @@ export abstract class Source {
     canAccessMall: boolean,
     uses?: number,
   ): UsePlan | null;
-  abstract apply(amount: number): void;
+  /** Do it, and report the meat it actually cost. */
+  abstract apply(amount: number, plan: UsePlan): number;
 
   warmPrice(_canAccessMall: boolean): void {
     // Only items have a mall price worth pre-fetching.
@@ -146,38 +173,55 @@ class ItemSource extends Source {
   }
 
   plan(options: GainOptions, state: RunState, canAccessMall: boolean, uses = 1): UsePlan | null {
-    // Only the copies we don't already have need buying, and `meatCost` covers
-    // all of them — `apply` buys the whole batch in one go.
+    // Only the copies we don't already have need buying.
     const toBuy = Math.max(0, uses - availableAmount(this.item));
-    let meatCost = 0;
+    let unitPrice = 0;
     let wish = false;
 
     if (toBuy > 0) {
       if (!this.item.tradeable || !canAccessMall) return null;
       if (historicalPrice(this.item) >= 100000) return null;
-      let unitPrice = mallPrice(this.item);
+      unitPrice = mallPrice(this.item);
       const wishPrice = mallPrice($item`pocket wish`);
       if (unitPrice >= 50000 && unitPrice >= wishPrice) {
         wish = true;
         unitPrice = wishPrice;
       }
-      meatCost = unitPrice * toBuy;
-      if (state.meatSpent + meatCost > options.maxMeatToSpend) return null;
+      if (state.meatSpent + unitPrice * toBuy > options.maxMeatToSpend) return null;
     }
 
     if (!this.item.tradeable && !this.item.reusable) return null;
     if (this.item.reusable && this.item.dailyusesleft === 0) return null;
 
-    return { meatCost, wish };
+    return { meatCost: unitPrice * toBuy, unitPrice, toBuy, wish };
   }
 
-  apply(amount: number): void {
-    // Using more than one d12 at a time skips the effect, so pace them out.
-    if (this.item === $item`d12`) {
-      for (let i = 0; i < amount; i++) use(1, this.item);
-    } else {
-      use(amount, this.item);
+  /**
+   * Buy what we're short of, then use what we have.
+   *
+   * `mallPrice` is the cheapest listing, but listings ladder upwards, so asking
+   * for several copies can cost more per copy than that suggests. Capping `buy`
+   * at the price we planned for means a steep ladder gets us fewer copies rather
+   * than a bigger bill — the next plan sees the shortfall and decides again.
+   */
+  apply(amount: number, plan: UsePlan): number {
+    let spent = 0;
+    if (plan.toBuy > 0 && plan.unitPrice > 0) {
+      spent = buy(plan.toBuy, this.item, plan.unitPrice) * plan.unitPrice;
     }
+
+    const usable = Math.min(amount, availableAmount(this.item));
+    if (usable <= 0) return spent;
+
+    withoutMallPurchases(() => {
+      // Using more than one d12 at a time skips the effect, so pace them out.
+      if (this.item === $item`d12`) {
+        for (let i = 0; i < usable; i++) use(1, this.item);
+      } else {
+        use(usable, this.item);
+      }
+    });
+    return spent;
   }
 }
 
@@ -222,7 +266,9 @@ class SkillSource extends Source {
   }
 
   plan(options: GainOptions, _state: RunState, canAccessMall: boolean): UsePlan | null {
-    return this.feasible(options, canAccessMall) ? { meatCost: 0, wish: false } : null;
+    return this.feasible(options, canAccessMall)
+      ? { meatCost: 0, unitPrice: 0, toBuy: 0, wish: false }
+      : null;
   }
 
   /** How many casts our HP and soulsauce pools allow right now (capped at 10). */
@@ -236,7 +282,7 @@ class SkillSource extends Source {
     );
   }
 
-  apply(amount: number): void {
+  apply(amount: number): number {
     const needGlove = CHEAT_CODES.has(this.skill) && !haveEquipped($item`Powerful Glove`);
     const saved = needGlove ? equippedItem($slot`acc1`) : null;
     if (needGlove) equip($slot`acc1`, $item`Powerful Glove`);
@@ -244,6 +290,7 @@ class SkillSource extends Source {
     useSkill(Math.min(this.affordableCasts, amount), this.skill);
 
     if (saved && saved !== $item`none`) equip($slot`acc1`, saved);
+    return 0;
   }
 }
 

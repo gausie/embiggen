@@ -31,9 +31,13 @@ class TestSource extends Source {
     return this.available;
   }
   plan(): UsePlan | null {
-    return this.available ? { meatCost: this.unitCost, wish: false } : null;
+    return this.available
+      ? { meatCost: this.unitCost, unitPrice: this.unitCost, toBuy: 1, wish: false }
+      : null;
   }
-  apply(): void {}
+  apply(): number {
+    return this.unitCost;
+  }
 }
 
 const ITEM_DROP = $modifier`Item Drop`;
