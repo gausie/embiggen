@@ -72,8 +72,9 @@ export function main(input: string): void {
       printHtml(`Spending up to ${formatNumber(options.maxMeatToSpend)} meat in total.`);
     } else if (targets.some(({ value }) => value === null)) {
       printHtml(
-        `Spending up to ${formatNumber(OPEN_ENDED_MEAT_LIMIT)} meat on each goal with no ` +
-          `target value. Raise it with <strong>X totalmeat</strong>.`,
+        `No total spending limit, so each goal with no target value is capped at ` +
+          `${formatNumber(OPEN_ENDED_MEAT_LIMIT)} meat. Set your own with ` +
+          `<strong>X totalmeat</strong>.`,
       );
     }
     if (maxEfficiency !== null) printHtml(`${formatNumber(maxEfficiency)} efficiency`);

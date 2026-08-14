@@ -10,7 +10,13 @@ import {
 import { get } from "libram";
 
 import { directionOf, GainOptions, RunState, Target } from "./options";
-import { buildCandidates, PlanContext, solveRequestFor } from "./plan";
+import {
+  buildCandidates,
+  CandidateBuild,
+  efficiencyOf,
+  PlanContext,
+  solveRequestFor,
+} from "./plan";
 import { freeSongSlots } from "./restrictions";
 import { solve, SolveResult } from "./solver";
 import { Source } from "./sources";
@@ -79,7 +85,13 @@ function gainEffect(
 }
 
 /** Print what the solver decided and why it stopped where it did. */
-function describePlan(result: SolveResult, target: Target, need: number, elapsed: number): void {
+function describePlan(
+  result: SolveResult,
+  build: CandidateBuild,
+  target: Target,
+  need: number,
+  elapsed: number,
+): void {
   // With a goal, report where we land — measured off the gap rather than the
   // live reading, so effects that are up but about to expire aren't counted
   // twice. Open-ended, there is nothing to land on, so report the gain.
@@ -93,9 +105,14 @@ function describePlan(result: SolveResult, target: Target, need: number, elapsed
       `${outcome} [${result.reason}, ${result.stats.candidates} candidates, ${elapsed}ms]`,
   );
   for (const candidate of result.chosen) {
+    // The efficiency is what `X efficiency` compares against, so showing it here
+    // is how you pick a number for it.
+    const source = build.sourcesFor.get(candidate.id)?.[0];
+    const efficiency = source ? efficiencyOf(source, target, candidate.progress) : Infinity;
     printHtml(
-      `&nbsp;&nbsp;${candidate.id}: +${formatNumber(candidate.progress)} for ` +
-        `${formatNumber(candidate.cost)} meat`,
+      `&nbsp;&nbsp;${candidate.id}: +${formatNumber(candidate.progress)} over ` +
+        `${formatNumber(source?.turnsPerUse ?? 0)} turns for ${formatNumber(candidate.cost)} meat ` +
+        `(${formatNumber(efficiency)} efficiency)`,
     );
   }
 }
@@ -131,7 +148,9 @@ export function raiseModifier(
     if (request.need <= 0) return;
 
     const result = solve(request);
-    if (!options.silent) describePlan(result, target, request.need, gametimeToInt() - started);
+    if (!options.silent) {
+      describePlan(result, build, target, request.need, gametimeToInt() - started);
+    }
 
     if (result.chosen.length === 0) {
       if (!options.silent) {

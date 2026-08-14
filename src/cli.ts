@@ -1,7 +1,7 @@
 import { Modifier, myPrimestat, printHtml } from "kolmafia";
 import { $modifiers } from "libram";
 
-import { defaultOptions, GainOptions } from "./options";
+import { defaultOptions, GainOptions, OPEN_ENDED_MEAT_LIMIT } from "./options";
 import { formatNumber, parseNumber } from "./util";
 
 /** Abbreviations mafia's own lookup won't recognise, mapped to canonical names. */
@@ -172,7 +172,7 @@ export function parseCommand(input: string): ParsedCommand {
 
 export function describeGoals(targets: ResolvedTarget[], minTurns: number): string {
   const parts = targets.map(({ modifier, value }) => {
-    if (value === null) return `${modifier} as high as the budget allows`;
+    if (value === null) return `${modifier} as high as possible`;
     const direction = value > 0 ? " up to " : " down to ";
     const suffix = SHOWN_AS_PERCENT.has(modifier) ? "%" : "";
     return `${modifier}${direction}${formatNumber(value)}${suffix}`;
@@ -190,7 +190,9 @@ export function printUsage(): void {
   );
   printHtml("<strong>X turns/turn</strong>: number of turns to gain");
   printHtml(
-    "<strong>X totalmeat</strong>: don't spend more meat than this in total (unlimited by default)",
+    `<strong>X totalmeat</strong>: total meat to spend. No limit by default, except that a goal ` +
+      `with no target value is capped at ${formatNumber(OPEN_ENDED_MEAT_LIMIT)} meat, having ` +
+      `nothing else to stop it.`,
   );
   printHtml(
     "<strong>X efficiency/eff</strong>: set efficiency limit, which avoids expensive effects",

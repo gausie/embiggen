@@ -147,16 +147,22 @@ function rankByPrice(
 }
 
 /**
- * Whether `X efficiency` rules this source out.
+ * Meat per point of modifier per turn of effect — the number behind `X
+ * efficiency`.
  *
- * Meat per point of modifier per turn of effect, kept on roughly its historical
- * scale because users have memorised values — but without the remaining-need
- * clamp, which compared against the wrong reading of the modifier and never bit.
+ * Kept on roughly its historical scale, because users have memorised values, but
+ * without the remaining-need clamp, which compared against the wrong reading of
+ * the modifier and never bit.
  */
-function tooInefficient(source: Source, target: Target, contribution: number): boolean {
+export function efficiencyOf(source: Source, target: Target, progress: number): number {
+  const gained = progress * Math.min(target.reasonableTurns, source.turnsPerUse);
+  return gained > 0 ? source.baseCost / gained : Infinity;
+}
+
+/** Whether `X efficiency` rules this source out. */
+function tooInefficient(source: Source, target: Target, progress: number): boolean {
   if (target.maxEfficiency === null || source.baseCost <= 0) return false;
-  const gained = Math.abs(contribution) * Math.min(target.reasonableTurns, source.turnsPerUse);
-  return gained === 0 || source.baseCost / gained > target.maxEfficiency;
+  return efficiencyOf(source, target, progress) > target.maxEfficiency;
 }
 
 /** What the modifier owes to effects that are up but expire before `minTurns`. */
@@ -234,7 +240,7 @@ export function buildCandidates(
 
     // Ranking is the expensive part, so it happens after the cheap rejections.
     const ranked = rankByPrice(granting, context, active);
-    if (tooInefficient(ranked.sources[0], target, gain)) continue;
+    if (tooInefficient(ranked.sources[0], target, progress)) continue;
 
     build.candidates.push({
       id: effect.name,
