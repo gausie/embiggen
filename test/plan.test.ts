@@ -73,9 +73,18 @@ function context(overrides: Partial<PlanContext> = {}): PlanContext {
   };
 }
 
+/** Mark an effect as an accordion song, the way mafia's game data would. */
+function asSong(effect: Effect): Effect {
+  (effect as unknown as { attributes: string }).attributes = "song";
+  return effect;
+}
+
 beforeEach(() => {
   // The effect index is memoised for the session, so each case starts fresh.
   forgetEffectIndex();
+  for (const effect of Effect.all()) {
+    (effect as unknown as { attributes: string }).attributes = "";
+  }
   gains.clear();
   live.clear();
   active.clear();
@@ -184,7 +193,12 @@ describe("buildCandidates", () => {
   it("tags songs and exclusion-group members so the solver can constrain them", () => {
     gains.set("Fat Leon's Phat Loot Lyric|Item Drop", 20);
     gains.set("Blue Tongue|Item Drop", 5);
-    const song = new TestSource($effect`Fat Leon's Phat Loot Lyric`, 10, 2, $item`seal tooth`);
+    const song = new TestSource(
+      asSong($effect`Fat Leon's Phat Loot Lyric`),
+      10,
+      2,
+      $item`seal tooth`,
+    );
     const tongue = new TestSource($effect`Blue Tongue`, 10, 2, $item`hot wing`);
 
     const build = buildCandidates([song, tongue], context());

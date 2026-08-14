@@ -23,6 +23,7 @@ import {
   myPath,
   mySoulsauce,
   numericModifier,
+  retrievePrice,
   Skill,
   soulsauceCost,
   toEffect,
@@ -158,22 +159,35 @@ class ItemSource extends Source {
     let unitPrice = 0;
     let wish = false;
 
+    let meatCost = 0;
     if (toBuy > 0) {
       if (!this.item.tradeable || !canAccessMall) return null;
       if (historicalPrice(this.item) >= 100000) return null;
-      unitPrice = mallPrice(this.item);
+
+      // `retrievePrice` walks the listings, so this is what the whole batch
+      // really costs rather than the cheapest listing multiplied out. The
+      // ceiling for `buy` is then the price of the last copy in the batch.
+      const owned = availableAmount(this.item);
+      meatCost = retrievePrice(this.item, owned + toBuy) - retrievePrice(this.item, owned);
+      unitPrice =
+        toBuy > 1
+          ? meatCost -
+            (retrievePrice(this.item, owned + toBuy - 1) - retrievePrice(this.item, owned))
+          : meatCost;
+
       const wishPrice = mallPrice($item`pocket wish`);
       if (unitPrice >= 50000 && unitPrice >= wishPrice) {
         wish = true;
         unitPrice = wishPrice;
+        meatCost = wishPrice * toBuy;
       }
-      if (state.meatSpent + unitPrice * toBuy > options.maxMeatToSpend) return null;
+      if (state.meatSpent + meatCost > options.maxMeatToSpend) return null;
     }
 
     if (!this.item.tradeable && !this.item.reusable) return null;
     if (this.item.reusable && this.item.dailyusesleft === 0) return null;
 
-    return { meatCost: unitPrice * toBuy, unitPrice, toBuy, wish };
+    return { meatCost, unitPrice, toBuy, wish };
   }
 
   /**
@@ -187,7 +201,10 @@ class ItemSource extends Source {
   apply(amount: number, plan: UsePlan): number {
     let spent = 0;
     if (plan.toBuy > 0 && plan.unitPrice > 0) {
-      spent = buy(plan.toBuy, this.item, plan.unitPrice) * plan.unitPrice;
+      const bought = buy(plan.toBuy, this.item, plan.unitPrice);
+      // Getting the whole batch costs what `plan` priced it at. Falling short
+      // means the ladder moved, and the last-copy ceiling is the best bound left.
+      spent = bought === plan.toBuy ? plan.meatCost : bought * plan.unitPrice;
     }
 
     const usable = Math.min(amount, availableAmount(this.item));

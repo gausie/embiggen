@@ -10,7 +10,8 @@ import {
 import { get } from "libram";
 
 import { directionOf, GainOptions, RunState, Target } from "./options";
-import { buildCandidates, freeSongSlots, PlanContext, solveRequestFor } from "./plan";
+import { buildCandidates, PlanContext, solveRequestFor } from "./plan";
+import { freeSongSlots } from "./restrictions";
 import { solve, SolveResult } from "./solver";
 import { Source } from "./sources";
 import { formatNumber } from "./util";

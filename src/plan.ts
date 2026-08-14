@@ -4,26 +4,22 @@
  */
 import {
   Effect,
-  familiarWeight,
   haveEffect,
   Modifier,
   myBuffedstat,
-  myFamiliar,
   myMaxhp,
   myMaxmp,
   numericModifier,
 } from "kolmafia";
-import { $modifier, $stat, get } from "libram";
+import { $modifier, $stat, get, isSong, totalFamiliarWeight } from "libram";
 
 import { effectiveModifier } from "./modifiers";
 import { directionOf, GainOptions, RunState, Target } from "./options";
 import {
   activeExclusionSibling,
-  activeSongCount,
   exclusionGroupId,
   FIXED_BLOCKED_EFFECTS,
-  isSongEffect,
-  songSlotLimit,
+  freeSongSlots,
 } from "./restrictions";
 import { Candidate, solve, SolveRequest } from "./solver";
 import { effectsFor, Source } from "./sources";
@@ -45,7 +41,9 @@ export function currentValue(modifier: Modifier): number {
     case $modifier`Maximum HP`:
       return myMaxhp();
     case $modifier`Familiar Weight`:
-      return numericModifier(modifier) + familiarWeight(myFamiliar());
+      // libram folds in soup weight, Fidoxene's floor and a feasted familiar,
+      // none of which `familiarWeight` alone reports.
+      return totalFamiliarWeight();
     default:
       return numericModifier(modifier);
   }
@@ -115,11 +113,6 @@ export interface CandidateBuild {
    * so it is measured before any feasibility filtering.
    */
   shortfall: number;
-}
-
-/** How many song slots are free right now, less any another target has claimed. */
-export function freeSongSlots(reserved = 0): number {
-  return Math.max(0, songSlotLimit() - activeSongCount() - reserved);
 }
 
 /** How much an effect moves this target's modifier, in the wanted direction. */
@@ -238,7 +231,7 @@ export function buildCandidates(
       progress,
       cost: ranked.price,
       group: exclusionGroupId(effect),
-      slot: isSongEffect(effect) ? SONG_SLOT : undefined,
+      slot: isSong(effect) ? SONG_SLOT : undefined,
     });
     build.sourcesFor.set(effect.name, ranked.sources);
   }
@@ -376,7 +369,7 @@ export function planShared(
     // cast, and their songs show up in the live count instead.
     let reservedSongSlots = 0;
     for (let later = i + 1; later < targets.length; later++) {
-      for (const id of chosen[later]) if (isSongEffect(Effect.get(id))) reservedSongSlots++;
+      for (const id of chosen[later]) if (isSong(Effect.get(id))) reservedSongSlots++;
     }
     return { freeEffects, reservedSongSlots };
   });
