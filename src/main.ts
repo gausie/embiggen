@@ -1,7 +1,7 @@
 import { canInteract, myAdventures, print, printHtml } from "kolmafia";
 
 import { describeGoals, parseCommand, printUsage } from "./cli";
-import { DEFAULT_MAX_MEAT, newRunState, RunState, Target } from "./options";
+import { NO_MEAT_LIMIT, newRunState, RunState, Target } from "./options";
 import { currentValue, needFor, planShared } from "./plan";
 import { buildRestrictions } from "./restrictions";
 import { sourcesFor } from "./sources";
@@ -18,6 +18,11 @@ function printBanner(): void {
 function printOutcome(goals: Target[], state: RunState): void {
   for (const goal of goals) {
     const value = Math.round(currentValue(goal.modifier) * 100) / 100;
+    // An open-ended goal can't fall short — it got whatever the budget bought.
+    if (goal.value === null) {
+      print(`${goal.modifier}: ${value}`, "blue");
+      continue;
+    }
     const met = needFor(goal) <= 0;
     print(
       `${goal.modifier}: ${value} of ${goal.value}${met ? "" : " — short"}`,
@@ -34,17 +39,17 @@ export function main(input: string): void {
     return;
   }
 
-  const { targets, unrecognised, minTurns, maxEfficiency, meatSpendPerTurnLimit, options } =
+  const { targets, unrecognised, minTurns, maxEfficiency, meatPerAdventureLimit, options } =
     parseCommand(input);
 
   if (!options.silent) {
     printBanner();
-    if (options.maxMeatToSpend !== DEFAULT_MAX_MEAT) {
-      printHtml(`Spending up to ${options.maxMeatToSpend} meat.`);
+    if (options.maxMeatToSpend !== NO_MEAT_LIMIT) {
+      printHtml(`Spending up to ${options.maxMeatToSpend} meat in total.`);
     }
     if (maxEfficiency !== null) printHtml(`${maxEfficiency} efficiency`);
-    if (meatSpendPerTurnLimit > 0) {
-      printHtml(`${meatSpendPerTurnLimit} total meat spent per turn of effect`);
+    if (meatPerAdventureLimit > 0) {
+      printHtml(`${meatPerAdventureLimit} meat per adventure of effect, across all effects.`);
     }
     if (!canInteract()) {
       printHtml("We're not in ronin, so we might break. I didn't test for this.");
@@ -75,7 +80,7 @@ export function main(input: string): void {
   const restrictions = buildRestrictions(options);
   const state = newRunState();
   const reasonableTurns = Math.max(minTurns, Math.min(myAdventures(), 20));
-  const perTargetMeatLimit = meatSpendPerTurnLimit / targets.length;
+  const perTargetMeatLimit = meatPerAdventureLimit / targets.length;
 
   const goals: Target[] = targets.map(({ modifier, value }) => ({
     modifier,
@@ -83,7 +88,7 @@ export function main(input: string): void {
     minTurns,
     reasonableTurns,
     maxEfficiency,
-    meatPerTurnLimit: perTargetMeatLimit,
+    meatPerAdventureLimit: perTargetMeatLimit,
     meatCap: options.maxMeatToSpend,
   }));
 

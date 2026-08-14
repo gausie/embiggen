@@ -50,7 +50,7 @@ function target(overrides: Partial<Target> = {}): Target {
     minTurns: 1,
     reasonableTurns: 20,
     maxEfficiency: null,
-    meatPerTurnLimit: 0,
+    meatPerAdventureLimit: 0,
     meatCap: Infinity,
     ...overrides,
   };

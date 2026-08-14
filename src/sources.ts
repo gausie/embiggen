@@ -33,7 +33,7 @@ import {
 import { $class, $effect, $item, $items, $slot, clamp, have } from "libram";
 
 import { effectiveModifier } from "./modifiers";
-import { GainOptions, RunState, Target } from "./options";
+import { directionOf, GainOptions, RunState, Target } from "./options";
 import {
   anyDisdainActive,
   CHEAT_CODES,
@@ -99,7 +99,7 @@ export abstract class Source {
     return this.baseCost * this.usesFor(minTurns, active);
   }
 
-  meatPerTurn(): number {
+  meatPerAdventure(): number {
     return this.baseCost / this.turnsPerUse;
   }
 
@@ -308,7 +308,7 @@ export function sourcesFor(
   options: GainOptions,
   restrictions: Restrictions,
 ): Source[] {
-  const wantPositive = target.value >= 0;
+  const wantPositive = directionOf(target) > 0;
   const path = myPath().name;
   const context: CandidateContext = {
     inGLover: path === "G-Lover",

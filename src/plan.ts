@@ -16,7 +16,7 @@ import {
 import { $modifier, $stat, get } from "libram";
 
 import { effectiveModifier } from "./modifiers";
-import { GainOptions, RunState, Target } from "./options";
+import { directionOf, GainOptions, RunState, Target } from "./options";
 import {
   activeExclusionSibling,
   activeSongCount,
@@ -51,19 +51,19 @@ export function currentValue(modifier: Modifier): number {
   }
 }
 
-/** Which way a target wants its modifier pushed: `1` up, `-1` down. */
-export function directionOf(target: Target): number {
-  return target.value >= 0 ? 1 : -1;
-}
-
 /**
  * How far the modifier still has to move, as a positive number. Zero or less
  * means the target is met.
  *
  * Flipping the sign here is what lets one solver serve `400 initiative` and
  * `-combat` alike: past this point everything is "more is better".
+ *
+ * An open-ended goal is genuinely infinite demand. The solver caps its table at
+ * what is actually achievable, so this asks for everything and gets back the
+ * most the budget will buy — no arbitrary stand-in number required.
  */
 export function needFor(target: Target): number {
+  if (target.value === null) return Infinity;
   return directionOf(target) * (target.value - currentValue(target.modifier));
 }
 
@@ -71,20 +71,20 @@ export function needFor(target: Target): number {
  * What a plan is denominated in.
  *
  * `meat` is the total to hold every chosen effect for `minTurns`, bounded by
- * `maxmeatspent`. `meat-per-turn` is what `spendperturn` asks for: a limit on
- * the summed price-per-turn-of-effect. Each is a plain budget in its own
- * currency, so the solver handles either without a second dimension — but only
- * one at a time, which is why `spendperturn` selects the currency.
+ * `totalmeat`. `meat-per-adventure` is what `meatperadventure` asks for: a
+ * limit on the summed price per adventure of effect. Each is a plain budget in
+ * its own currency, so the solver handles either without a second dimension —
+ * but only one at a time, which is why `meatperadventure` picks the currency.
  */
-export type CostMode = "meat" | "meat-per-turn";
+export type CostMode = "meat" | "meat-per-adventure";
 
 export function costModeFor(target: Target): CostMode {
-  return target.meatPerTurnLimit > 0 ? "meat-per-turn" : "meat";
+  return target.meatPerAdventureLimit > 0 ? "meat-per-adventure" : "meat";
 }
 
 /** What this target may spend, in whatever currency it is planning in. */
 export function budgetFor(target: Target, options: GainOptions, state: RunState): number {
-  if (costModeFor(target) === "meat-per-turn") return target.meatPerTurnLimit;
+  if (costModeFor(target) === "meat-per-adventure") return target.meatPerAdventureLimit;
   return Math.max(0, Math.min(target.meatCap, options.maxMeatToSpend) - state.meatSpent);
 }
 
@@ -170,8 +170,8 @@ export function buildCandidates(
 
   const cost = (source: Source, active: number) => {
     if (context.freeEffects.has(source.effect)) return 0;
-    return context.costMode === "meat-per-turn"
-      ? source.meatPerTurn()
+    return context.costMode === "meat-per-adventure"
+      ? source.meatPerAdventure()
       : source.costFor(target.minTurns, active);
   };
 
@@ -347,8 +347,8 @@ function refreshFrontRunners(build: CandidateBuild, context: PlanContext, count:
 
   const active = 0; // Front-runners are candidates, so none of them is up yet.
   const priceOf = (source: Source) =>
-    context.costMode === "meat-per-turn"
-      ? source.meatPerTurn()
+    context.costMode === "meat-per-adventure"
+      ? source.meatPerAdventure()
       : source.costFor(context.target.minTurns, active);
 
   for (const candidate of front) {

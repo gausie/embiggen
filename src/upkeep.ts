@@ -9,12 +9,11 @@ import {
 } from "kolmafia";
 import { get } from "libram";
 
-import { GainOptions, RunState, Target } from "./options";
+import { directionOf, GainOptions, RunState, Target } from "./options";
 import {
   budgetFor,
   buildCandidates,
   costModeFor,
-  directionOf,
   freeSongSlots,
   needFor,
   PlanContext,
@@ -89,13 +88,17 @@ function gainEffect(
 /** Print what the solver decided and why it stopped where it did. */
 function describePlan(result: SolveResult, target: Target, need: number, elapsed: number): void {
   const round = (value: number) => Math.round(value * 100) / 100;
-  // Measured off the gap rather than the live reading, so effects that are up
-  // but about to expire aren't counted twice.
-  const projected = target.value - directionOf(target) * (need - result.progress);
+  // With a goal, report where we land — measured off the gap rather than the
+  // live reading, so effects that are up but about to expire aren't counted
+  // twice. Open-ended, there is nothing to land on, so report the gain.
+  const outcome =
+    target.value === null
+      ? `+${round(result.progress)}`
+      : `reaching ${round(target.value - directionOf(target) * (need - result.progress))} ` +
+        `(${round(need)} to go)`;
   printHtml(
     `${target.modifier}: ${result.chosen.length} effects for ${Math.round(result.cost)} meat, ` +
-      `reaching ${round(projected)} (${round(need)} to go) ` +
-      `[${result.reason}, ${result.stats.candidates} candidates, ${elapsed}ms]`,
+      `${outcome} [${result.reason}, ${result.stats.candidates} candidates, ${elapsed}ms]`,
   );
   for (const candidate of result.chosen) {
     printHtml(

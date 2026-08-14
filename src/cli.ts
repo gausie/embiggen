@@ -1,7 +1,7 @@
 import { Modifier, myPrimestat, printHtml } from "kolmafia";
 import { $modifiers } from "libram";
 
-import { defaultOptions, GainOptions } from "./options";
+import { defaultOptions, GainOptions, NO_MEAT_LIMIT, OPEN_ENDED_MEAT_LIMIT } from "./options";
 import { parseNumber } from "./util";
 
 /** Abbreviations mafia's own lookup won't recognise, mapped to canonical names. */
@@ -43,7 +43,8 @@ function resolveModifiers(phrase: string): Modifier[] {
 
 export interface ResolvedTarget {
   modifier: Modifier;
-  value: number;
+  /** The value to reach, or `null` for "as far as the budget stretches". */
+  value: number | null;
 }
 
 export interface ParsedCommand {
@@ -51,7 +52,7 @@ export interface ParsedCommand {
   unrecognised: string[];
   minTurns: number;
   maxEfficiency: number | null;
-  meatSpendPerTurnLimit: number;
+  meatPerAdventureLimit: number;
   options: GainOptions;
 }
 
@@ -76,14 +77,18 @@ function addTargets(
     return;
   }
 
-  // A bare modifier with no number means "as much as possible" on a tight budget.
-  if (value === 0) {
-    value = 1000000;
-    options.maxMeatToSpend = 10000;
+  // A bare modifier with no number means "as much as possible". `null` says
+  // exactly that, so the solver maximises against the budget instead of chasing
+  // an arbitrarily large stand-in number. Since there is no target value to stop
+  // it, it gets a spending rail unless the command set one — otherwise "as high
+  // as possible" with no ceiling would buy out the mall.
+  const goal = value === 0 ? null : value;
+  if (goal === null && options.maxMeatToSpend === NO_MEAT_LIMIT) {
+    options.maxMeatToSpend = OPEN_ENDED_MEAT_LIMIT;
   }
 
   for (const modifier of modifiers) {
-    targets.push({ modifier, value });
+    targets.push({ modifier, value: goal });
   }
 }
 
@@ -93,7 +98,7 @@ export function parseCommand(input: string): ParsedCommand {
   const unrecognised: string[] = [];
   let minTurns = 1;
   let maxEfficiency: number | null = null;
-  let meatSpendPerTurnLimit = 0;
+  let meatPerAdventureLimit = 0;
 
   let pendingValue = 0;
   let currentModifier = "";
@@ -114,13 +119,13 @@ export function parseCommand(input: string): ParsedCommand {
         pendingValue = 0;
         currentModifier = "";
         continue;
-      case "spendperturn":
-      case "spt":
-        meatSpendPerTurnLimit = pendingValue;
+      case "meatperadventure":
+      case "mpa":
+        meatPerAdventureLimit = pendingValue;
         pendingValue = 0;
         currentModifier = "";
         continue;
-      case "maxmeatspent":
+      case "totalmeat":
         options.maxMeatToSpend = pendingValue;
         pendingValue = 0;
         currentModifier = "";
@@ -166,13 +171,14 @@ export function parseCommand(input: string): ParsedCommand {
     unrecognised,
     minTurns,
     maxEfficiency,
-    meatSpendPerTurnLimit,
+    meatPerAdventureLimit,
     options,
   };
 }
 
 export function describeGoals(targets: ResolvedTarget[], minTurns: number): string {
   const parts = targets.map(({ modifier, value }) => {
+    if (value === null) return `${modifier} as high as the budget allows`;
     const direction = value > 0 ? " up to " : " down to ";
     const suffix = SHOWN_AS_PERCENT.has(modifier) ? "%" : "";
     return `${modifier}${direction}${value}${suffix}`;
@@ -189,12 +195,14 @@ export function printUsage(): void {
     "<strong>absolute/nopercentage</strong>: don't take into account percentage buffs for muscle/mysticality/moxie/hp/mp",
   );
   printHtml("<strong>X turns/turn</strong>: number of turns to gain");
-  printHtml("<strong>X maxmeatspent</strong>: don't spend more meat than this");
+  printHtml(
+    "<strong>X totalmeat</strong>: don't spend more meat than this in total (unlimited by default)",
+  );
   printHtml(
     "<strong>X efficiency/eff</strong>: set efficiency limit, which avoids expensive effects",
   );
   printHtml(
-    "<strong>X spendperturn/spt</strong>: sets a total spend limit per turn, shared across all effects.",
+    "<strong>X meatperadventure/mpa</strong>: cap the meat spent per adventure of effect, shared across all effects.",
   );
   printHtml("");
   printHtml("Example usage:");
@@ -208,12 +216,12 @@ export function printUsage(): void {
     "<strong>embiggen 400 init 20 familiar weight 300 muscle 50 turns</strong>: buff familiar weight up to 20, initiative up to 400, and muscle up to 300, for 50 turns.",
   );
   printHtml(
-    "<strong>embiggen 10000 monster level 10000 maxmeatspent</strong>: spend 10k meat on +monster level",
+    "<strong>embiggen 10000 monster level 10000 totalmeat</strong>: spend 10k meat on +monster level",
   );
   printHtml(
     "<strong>embiggen weapon damage 0.5 efficiency</strong>: gain weapon damage while only using cheap effect sources - efficiency value can be tuned",
   );
   printHtml(
-    "<strong>embiggen hp 100 spendperturn</strong>: gain HP while spending up to one hundred meat per turn, total, across all effects gained. Better than efficiency.",
+    "<strong>embiggen hp 100 mpa</strong>: gain HP while spending up to one hundred meat per adventure of effect, total, across all effects gained. Better than efficiency.",
   );
 }

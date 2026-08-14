@@ -2,6 +2,7 @@ import { $modifier, $modifiers } from "libram";
 import { describe, expect, it } from "vitest";
 
 import { parseCommand } from "../src/cli";
+import { NO_MEAT_LIMIT, OPEN_ENDED_MEAT_LIMIT } from "../src/options";
 
 describe("parseCommand", () => {
   it("parses a single modifier target", () => {
@@ -44,26 +45,47 @@ describe("parseCommand", () => {
     expect(targets).toEqual([{ modifier: $modifier`Muscle`, value: 300 }]);
   });
 
-  it("a bare modifier means max effort on a tight budget", () => {
+  it("spends nothing by default until asked to", () => {
+    expect(parseCommand("400 init").options.maxMeatToSpend).toBe(NO_MEAT_LIMIT);
+  });
+
+  it("a bare modifier asks for as much as possible, on a rail", () => {
+    // No target value means nothing would stop the solver, so an open-ended
+    // goal gets a spending limit even though a normal one doesn't.
     const { targets, options } = parseCommand("ml");
-    expect(targets).toEqual([{ modifier: $modifier`Monster Level`, value: 1000000 }]);
-    expect(options.maxMeatToSpend).toBe(10000);
+    expect(targets).toEqual([{ modifier: $modifier`Monster Level`, value: null }]);
+    expect(options.maxMeatToSpend).toBe(OPEN_ENDED_MEAT_LIMIT);
   });
 
-  it("maxmeatspent sets the cap and can raise it above the default", () => {
-    expect(parseCommand("10000 ml 10000 maxmeatspent").options.maxMeatToSpend).toBe(10000);
-    // Regression: previously Math.min against the 100k default silently ignored this.
-    expect(parseCommand("500000 ml 500000 maxmeatspent").options.maxMeatToSpend).toBe(500000);
+  it("lets an explicit budget override the open-ended rail", () => {
+    expect(parseCommand("50000 totalmeat ml").options.maxMeatToSpend).toBe(50000);
+    expect(parseCommand("ml 50000 totalmeat").options.maxMeatToSpend).toBe(50000);
   });
 
-  it("captures efficiency and spend-per-turn limits", () => {
+  it("totalmeat sets the cap", () => {
+    expect(parseCommand("10000 ml 10000 totalmeat").options.maxMeatToSpend).toBe(10000);
+    // Regression: previously Math.min against a 100k default silently ignored this.
+    expect(parseCommand("500000 ml 500000 totalmeat").options.maxMeatToSpend).toBe(500000);
+  });
+
+  it("captures efficiency and meat-per-adventure limits", () => {
     const eff = parseCommand("weapon damage 0.5 efficiency");
     expect(eff.maxEfficiency).toBe(0.5);
-    expect(eff.targets).toEqual([{ modifier: $modifier`Weapon Damage`, value: 1000000 }]);
+    expect(eff.targets).toEqual([{ modifier: $modifier`Weapon Damage`, value: null }]);
 
-    const spt = parseCommand("hp 100 spendperturn");
-    expect(spt.meatSpendPerTurnLimit).toBe(100);
-    expect(spt.targets).toEqual([{ modifier: $modifier`Maximum HP`, value: 1000000 }]);
+    for (const command of ["hp 100 meatperadventure", "hp 100 mpa"]) {
+      const parsed = parseCommand(command);
+      expect(parsed.meatPerAdventureLimit).toBe(100);
+      expect(parsed.targets).toEqual([{ modifier: $modifier`Maximum HP`, value: null }]);
+    }
+  });
+
+  it("still reads meat as the meat drop modifier", () => {
+    // `meat` stays an alias for the modifier rather than becoming a budget
+    // keyword, so `300 meat` keeps meaning what it always has.
+    expect(parseCommand("300 meat").targets).toEqual([
+      { modifier: $modifier`Meat Drop`, value: 300 },
+    ]);
   });
 
   it("reads standalone flags", () => {
