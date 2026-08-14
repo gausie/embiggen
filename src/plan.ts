@@ -122,44 +122,9 @@ export function freeSongSlots(reserved = 0): number {
   return Math.max(0, songSlotLimit() - activeSongCount() - reserved);
 }
 
-/**
- * One `haveEffect` lookup per effect for the life of a build.
- *
- * It is a native call, and the same effect gets asked for from several places:
- * once per source while filtering, again while costing, and again for every
- * member of an exclusion group.
- */
-function turnsRemaining(): (effect: Effect) => number {
-  const cache = new Map<Effect, number>();
-  return (effect) => {
-    let turns = cache.get(effect);
-    if (turns === undefined) {
-      turns = haveEffect(effect);
-      cache.set(effect, turns);
-    }
-    return turns;
-  };
-}
-
-/**
- * One `effectiveModifier` computation per effect for the life of a build,
- * already sign-normalised toward the target.
- *
- * It is two to five native calls each — more for Maximum HP/MP, which recurse —
- * and a build asks for the same effect while measuring the shortfall, while
- * costing it, and again as some other effect's displaced rival.
- */
-function contributionsToward(target: Target, options: GainOptions): (effect: Effect) => number {
-  const direction = directionOf(target);
-  const cache = new Map<Effect, number>();
-  return (effect) => {
-    let value = cache.get(effect);
-    if (value === undefined) {
-      value = direction * effectiveModifier(effect, target.modifier, options);
-      cache.set(effect, value);
-    }
-    return value;
-  };
+/** How much an effect moves this target's modifier, in the wanted direction. */
+function contributionToward(effect: Effect, target: Target, options: GainOptions): number {
+  return directionOf(target) * effectiveModifier(effect, target.modifier, options);
 }
 
 /** What a source costs this target, in the currency the target is planning in. */
@@ -200,33 +165,25 @@ function tooInefficient(source: Source, target: Target, contribution: number): b
 }
 
 /** What the modifier owes to effects that are up but expire before `minTurns`. */
-function shortfallFor(
-  target: Target,
-  options: GainOptions,
-  active: (effect: Effect) => number,
-  contribution: (effect: Effect) => number,
-): number {
+function shortfallFor(target: Target, options: GainOptions): number {
   let total = 0;
   for (const effect of effectsFor(target, options)) {
-    const turns = active(effect);
+    const turns = haveEffect(effect);
     if (turns <= 0 || turns >= target.minTurns) continue;
-    if (contribution(effect) > 0) total += contribution(effect);
+    const contribution = contributionToward(effect, target, options);
+    if (contribution > 0) total += contribution;
   }
   return total;
 }
 
 /** Sources still worth costing, grouped by the effect they grant. */
-function usableByEffect(
-  sources: Source[],
-  context: PlanContext,
-  active: (effect: Effect) => number,
-): Map<Effect, Source[]> {
+function usableByEffect(sources: Source[], context: PlanContext): Map<Effect, Source[]> {
   const byEffect = new Map<Effect, Source[]>();
   for (const source of sources) {
     if (FIXED_BLOCKED_EFFECTS.has(source.effect)) continue;
     if (context.done.has(source.effect)) continue;
     if (context.state.blockedSources.has(source.key)) continue;
-    if (active(source.effect) >= context.target.minTurns) continue;
+    if (haveEffect(source.effect) >= context.target.minTurns) continue;
     if (!source.feasible(context.options, context.canAccessMall)) continue;
     const existing = byEffect.get(source.effect);
     if (existing) existing.push(source);
@@ -252,17 +209,15 @@ export function buildCandidates(
   prewarm = 0,
 ): CandidateBuild {
   const { target, options } = context;
-  const active = turnsRemaining();
-  const contribution = contributionsToward(target, options);
 
   const build: CandidateBuild = {
     candidates: [],
     sourcesFor: new Map(),
-    shortfall: shortfallFor(target, options, active, contribution),
+    shortfall: shortfallFor(target, options),
   };
 
-  for (const [effect, granting] of usableByEffect(sources, context, active)) {
-    const gain = contribution(effect);
+  for (const [effect, granting] of usableByEffect(sources, context)) {
+    const gain = contributionToward(effect, target, options);
 
     // Gaining this overwrites any rival already up, so only the difference is
     // new — and if we are the ones relying on that rival, don't touch it. The
@@ -271,11 +226,11 @@ export function buildCandidates(
     const rival = activeExclusionSibling(effect);
     if (rival && (context.freeEffects.has(rival) || context.done.has(rival))) continue;
 
-    const progress = gain - (rival ? contribution(rival) : 0);
+    const progress = gain - (rival ? contributionToward(rival, target, options) : 0);
     if (progress <= 0) continue;
 
     // Ranking is the expensive part, so it happens after the cheap rejections.
-    const ranked = rankByPrice(granting, context, active(effect));
+    const ranked = rankByPrice(granting, context, haveEffect(effect));
     if (tooInefficient(ranked.sources[0], target, gain)) continue;
 
     build.candidates.push({
@@ -288,17 +243,12 @@ export function buildCandidates(
     build.sourcesFor.set(effect.name, ranked.sources);
   }
 
-  if (prewarm > 0) refreshFrontRunners(build, context, active, prewarm);
+  if (prewarm > 0) refreshFrontRunners(build, context, prewarm);
   return build;
 }
 
 /** Look up live mall prices for the best-looking candidates and re-cost them. */
-function refreshFrontRunners(
-  build: CandidateBuild,
-  context: PlanContext,
-  active: (effect: Effect) => number,
-  count: number,
-): void {
+function refreshFrontRunners(build: CandidateBuild, context: PlanContext, count: number): void {
   const front = build.candidates
     .slice()
     .sort((a, b) => a.cost / a.progress - b.cost / b.progress)
@@ -315,7 +265,7 @@ function refreshFrontRunners(
   for (const candidate of front) {
     const sources = build.sourcesFor.get(candidate.id);
     if (!sources || sources.length === 0) continue;
-    const ranked = rankByPrice(sources, context, active(sources[0].effect));
+    const ranked = rankByPrice(sources, context, haveEffect(sources[0].effect));
     build.sourcesFor.set(candidate.id, ranked.sources);
     candidate.cost = ranked.price;
   }
