@@ -7,7 +7,7 @@ import { buildRestrictions } from "./restrictions";
 import { sourcesFor } from "./sources";
 import { raiseModifier } from "./upkeep";
 
-const VERSION = "1.0.0";
+const VERSION = "2.0.0";
 
 export function main(input: string): void {
   if (input.trim() === "" || input.includes("help")) {
