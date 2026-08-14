@@ -1,7 +1,7 @@
 import { Modifier, myPrimestat, printHtml } from "kolmafia";
 import { $modifiers } from "libram";
 
-import { defaultOptions, GainOptions, NO_MEAT_LIMIT, OPEN_ENDED_MEAT_LIMIT } from "./options";
+import { defaultOptions, GainOptions } from "./options";
 import { formatNumber, parseNumber } from "./util";
 
 /** Abbreviations mafia's own lookup won't recognise, mapped to canonical names. */
@@ -61,7 +61,6 @@ function addTargets(
   unrecognised: string[],
   phrase: string,
   value: number,
-  options: GainOptions,
 ): void {
   if (phrase === "-combat") {
     if (value > 0) value = -value;
@@ -79,14 +78,10 @@ function addTargets(
 
   // A bare modifier with no number means "as much as possible". `null` says
   // exactly that, so the solver maximises against the budget instead of chasing
-  // an arbitrarily large stand-in number. Since there is no target value to stop
-  // it, it gets a spending rail unless the command set one — otherwise "as high
-  // as possible" with no ceiling would buy out the mall.
+  // an arbitrarily large stand-in number. Such a goal has no stopping condition
+  // of its own, so `main.ts` gives it a spending rail — done there, per goal,
+  // rather than here, where it would clamp the budget for every other goal too.
   const goal = value === 0 ? null : value;
-  if (goal === null && options.maxMeatToSpend === NO_MEAT_LIMIT) {
-    options.maxMeatToSpend = OPEN_ENDED_MEAT_LIMIT;
-  }
-
   for (const modifier of modifiers) {
     targets.push({ modifier, value: goal });
   }
@@ -130,30 +125,29 @@ export function parseCommand(input: string): ParsedCommand {
         pendingValue = 0;
         currentModifier = "";
         continue;
+      // A flag that takes no number sits anywhere in the command, so it must
+      // leave a half-read modifier alone — clearing it would silently throw the
+      // goal away, as `embiggen item plan` used to.
       case "absolute":
       case "nopercentage":
         options.ignorePercentages = true;
-        currentModifier = "";
         continue;
       case "limited":
         options.allowLimitedBuffs = true;
-        currentModifier = "";
         continue;
       case "silent":
         options.silent = true;
-        currentModifier = "";
         continue;
       case "plan":
       case "dryrun":
         options.dryRun = true;
-        currentModifier = "";
         continue;
     }
 
     const numeric = parseNumber(token);
     if (numeric !== null) {
       if (currentModifier !== "") {
-        addTargets(targets, unrecognised, currentModifier, pendingValue, options);
+        addTargets(targets, unrecognised, currentModifier, pendingValue);
         currentModifier = "";
       }
       pendingValue = numeric;
@@ -163,7 +157,7 @@ export function parseCommand(input: string): ParsedCommand {
   }
 
   if (currentModifier !== "") {
-    addTargets(targets, unrecognised, currentModifier, pendingValue, options);
+    addTargets(targets, unrecognised, currentModifier, pendingValue);
   }
 
   return {

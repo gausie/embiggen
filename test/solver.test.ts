@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { Candidate, prepareCandidates, pruneDominated, solve, solveGreedy } from "../src/solver";
+import { Candidate, prepareCandidates, pruneDominated, solve } from "../src/solver";
+
+import { solveGreedy } from "./greedy";
 
 function candidate(
   id: string,
@@ -13,8 +15,8 @@ function candidate(
 
 const ids = (chosen: Candidate[]) => chosen.map((c) => c.id).sort();
 
-// These hold for both solvers: the exact DP, and the greedy that stands in as
-// its fallback and as the DP's differential-test oracle.
+// These hold for both the exact DP and the greedy reference implementation the
+// property tests use as an oracle.
 describe.each([
   { name: "solve", solver: solve },
   { name: "solveGreedy", solver: solveGreedy },
@@ -72,8 +74,8 @@ describe.each([
 
   describe("when the goal can't be met", () => {
     it("spends up to the budget and reports budget-capped", () => {
-      // The "bare modifier" mode: cli.ts turns `embiggen item` into an
-      // unreachable target on a 10k budget, and expects maximal progress.
+      // The "bare modifier" mode: `embiggen item` asks for everything on a 10k
+      // budget, and expects the most progress that buys.
       const result = solver({
         candidates: [
           candidate("a", 30, 4000),
@@ -193,17 +195,6 @@ describe.each([
     });
   });
 
-  it("biases toward fewer buffs when a per-effect penalty is set", () => {
-    const candidates = [candidate("big", 10, 100), candidate("s1", 5, 40), candidate("s2", 5, 40)];
-
-    expect(ids(solver({ candidates, need: 10, budget: Infinity }).chosen)).toEqual(["s1", "s2"]);
-    // The pair costs 80 in meat but 140 notional at a 30 penalty, so the single
-    // 100-meat buff (130 notional) wins.
-    expect(
-      ids(solver({ candidates, need: 10, budget: Infinity, perEffectPenalty: 30 }).chosen),
-    ).toEqual(["big"]);
-  });
-
   describe("input contract", () => {
     it("filters candidates that can't help rather than crashing", () => {
       const result = solver({
@@ -227,8 +218,8 @@ describe("solveGreedy, where the greedy falls short", () => {
   it("is myopic about which group member to lock in", () => {
     // Greedy commits to the cheapest member, `purple`, then can only add
     // `potion` and finishes a point short. Reaching 10 needs `blue` + `potion`,
-    // which means looking past the best immediate ratio. This is the limitation
-    // `solve` exists to remove — see the contrasting case below.
+    // which means looking past the best immediate ratio — the limitation that
+    // made an exact solver worth writing. See the contrasting case below.
     const group = { group: "tongues" };
     const result = solveGreedy({
       candidates: [

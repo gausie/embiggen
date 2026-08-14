@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { defaultOptions, newRunState, Target } from "../src/options";
 import { buildCandidates, currentValue, needFor, PlanContext, SONG_SLOT } from "../src/plan";
-import { Source, UsePlan } from "../src/sources";
+import { forgetEffectIndex, Source, UsePlan } from "../src/sources";
 
 /** A `Source` with every game lookup replaced by a constant. */
 class TestSource extends Source {
@@ -62,7 +62,6 @@ function context(overrides: Partial<PlanContext> = {}): PlanContext {
     options: defaultOptions(),
     state: newRunState(),
     canAccessMall: true,
-    costMode: "meat",
     freeSongSlots: 3,
     freeEffects: new Set(),
     done: new Set(),
@@ -71,6 +70,8 @@ function context(overrides: Partial<PlanContext> = {}): PlanContext {
 }
 
 beforeEach(() => {
+  // The effect index is memoised for the session, so each case starts fresh.
+  forgetEffectIndex();
   gains.clear();
   live.clear();
   active.clear();
@@ -155,15 +156,14 @@ describe("buildCandidates", () => {
     expect(build.shortfall).toBe(0);
   });
 
-  it("keeps the cheapest source and the rest as fallbacks", () => {
+  it("orders an effect's sources cheapest first", () => {
     gains.set("Fat Leon's Phat Loot Lyric|Item Drop", 20);
     const dear = new TestSource($effect`Fat Leon's Phat Loot Lyric`, 10, 500, $item`seal tooth`);
     const cheap = new TestSource($effect`Fat Leon's Phat Loot Lyric`, 10, 40, $item`hot wing`);
 
     const build = buildCandidates([dear, cheap], context());
     expect(build.candidates[0].cost).toBe(40);
-    expect(build.sourceFor.get("Fat Leon's Phat Loot Lyric")).toBe(cheap);
-    expect(build.fallbacks.get("Fat Leon's Phat Loot Lyric")).toEqual([dear]);
+    expect(build.sourcesFor.get("Fat Leon's Phat Loot Lyric")).toEqual([cheap, dear]);
   });
 
   it("prices an effect another target is already paying for at nothing", () => {

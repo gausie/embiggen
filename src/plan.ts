@@ -25,8 +25,8 @@ import {
   isSongEffect,
   songSlotLimit,
 } from "./restrictions";
-import { Candidate, solve } from "./solver";
-import { Source } from "./sources";
+import { Candidate, solve, SolveRequest } from "./solver";
+import { effectsFor, Source } from "./sources";
 
 /** The one slot class KoL limits: accordion songs share a rack of 3 or 4. */
 export const SONG_SLOT = "song";
@@ -93,7 +93,6 @@ export interface PlanContext {
   options: GainOptions;
   state: RunState;
   canAccessMall: boolean;
-  costMode: CostMode;
   /** Song slots this target may use, after other targets have reserved theirs. */
   freeSongSlots: number;
   /** Effects another target already plans to pay for, so this one gets them free. */
@@ -104,18 +103,16 @@ export interface PlanContext {
 
 export interface CandidateBuild {
   candidates: Candidate[];
-  /** Candidate id -> the source to actually use. */
-  sourceFor: Map<string, Source>;
-  /** Candidate id -> other sources of the same effect, if the first grants nothing. */
-  fallbacks: Map<string, Source[]>;
+  /** Candidate id -> every source of that effect, cheapest first. */
+  sourcesFor: Map<string, Source[]>;
   /**
    * What the modifier is currently getting from effects that won't last
    * `minTurns` turns.
    *
    * The reading includes them but the goal outlives them, so this has to be
-   * added back to the gap. Extending such an effect is then just one candidate
-   * among others — priced at only the extra uses it needs — rather than a
-   * purchase forced through before anything else is weighed.
+   * added back to the gap. It is a fact about game state rather than about what
+   * we can buy — an effect we have no way to renew still inflates the reading —
+   * so it is measured before any feasibility filtering.
    */
   shortfall: number;
 }
@@ -125,14 +122,111 @@ export function freeSongSlots(reserved = 0): number {
   return Math.max(0, songSlotLimit() - activeSongCount() - reserved);
 }
 
+/**
+ * One `haveEffect` lookup per effect for the life of a build.
+ *
+ * It is a native call, and the same effect gets asked for from several places:
+ * once per source while filtering, again while costing, and again for every
+ * member of an exclusion group.
+ */
+function turnsRemaining(): (effect: Effect) => number {
+  const cache = new Map<Effect, number>();
+  return (effect) => {
+    let turns = cache.get(effect);
+    if (turns === undefined) {
+      turns = haveEffect(effect);
+      cache.set(effect, turns);
+    }
+    return turns;
+  };
+}
+
+/**
+ * One `effectiveModifier` computation per effect for the life of a build,
+ * already sign-normalised toward the target.
+ *
+ * It is two to five native calls each — more for Maximum HP/MP, which recurse —
+ * and a build asks for the same effect while measuring the shortfall, while
+ * costing it, and again as some other effect's displaced rival.
+ */
+function contributionsToward(target: Target, options: GainOptions): (effect: Effect) => number {
+  const direction = directionOf(target);
+  const cache = new Map<Effect, number>();
+  return (effect) => {
+    let value = cache.get(effect);
+    if (value === undefined) {
+      value = direction * effectiveModifier(effect, target.modifier, options);
+      cache.set(effect, value);
+    }
+    return value;
+  };
+}
+
+/** What a source costs this target, in the currency the target is planning in. */
+function priceOf(source: Source, context: PlanContext, active: number): number {
+  if (context.freeEffects.has(source.effect)) return 0;
+  return costModeFor(context.target) === "meat-per-adventure"
+    ? source.meatPerAdventure()
+    : source.costFor(context.target.minTurns, active);
+}
+
+/** The sources for one effect, cheapest first, with the winner's price. */
+function rankByPrice(
+  sources: Source[],
+  context: PlanContext,
+  active: number,
+): { sources: Source[]; price: number } {
+  // Decorate-sort-undecorate: `priceOf` reaches into mafia, so pay for it once
+  // per source rather than twice per comparison.
+  const priced = sources.map((source) => ({ source, price: priceOf(source, context, active) }));
+  priced.sort((a, b) => a.price - b.price);
+  return {
+    sources: priced.map((entry) => entry.source),
+    price: priced.length > 0 ? priced[0].price : Infinity,
+  };
+}
+
+/**
+ * Whether `X efficiency` rules this source out.
+ *
+ * Meat per point of modifier per turn of effect, kept on roughly its historical
+ * scale because users have memorised values — but without the remaining-need
+ * clamp, which compared against the wrong reading of the modifier and never bit.
+ */
+function tooInefficient(source: Source, target: Target, contribution: number): boolean {
+  if (target.maxEfficiency === null || source.baseCost <= 0) return false;
+  const gained = Math.abs(contribution) * Math.min(target.reasonableTurns, source.turnsPerUse);
+  return gained === 0 || source.baseCost / gained > target.maxEfficiency;
+}
+
+/** What the modifier owes to effects that are up but expire before `minTurns`. */
+function shortfallFor(
+  target: Target,
+  options: GainOptions,
+  active: (effect: Effect) => number,
+  contribution: (effect: Effect) => number,
+): number {
+  let total = 0;
+  for (const effect of effectsFor(target, options)) {
+    const turns = active(effect);
+    if (turns <= 0 || turns >= target.minTurns) continue;
+    if (contribution(effect) > 0) total += contribution(effect);
+  }
+  return total;
+}
+
 /** Sources still worth costing, grouped by the effect they grant. */
-function usableByEffect(sources: Source[], context: PlanContext): Map<Effect, Source[]> {
+function usableByEffect(
+  sources: Source[],
+  context: PlanContext,
+  active: (effect: Effect) => number,
+): Map<Effect, Source[]> {
   const byEffect = new Map<Effect, Source[]>();
   for (const source of sources) {
     if (FIXED_BLOCKED_EFFECTS.has(source.effect)) continue;
     if (context.done.has(source.effect)) continue;
     if (context.state.blockedSources.has(source.key)) continue;
-    if (haveEffect(source.effect) >= context.target.minTurns) continue;
+    if (active(source.effect) >= context.target.minTurns) continue;
     if (!source.feasible(context.options, context.canAccessMall)) continue;
     const existing = byEffect.get(source.effect);
     if (existing) existing.push(source);
@@ -145,8 +239,8 @@ function usableByEffect(sources: Source[], context: PlanContext): Map<Effect, So
  * Turn every way of gaining an effect into at most one costed `Candidate`.
  *
  * Sources granting the same effect are interchangeable as far as the modifier
- * is concerned, so only the cheapest usable one becomes the candidate; the rest
- * are kept as fallbacks for when a source silently grants nothing.
+ * is concerned, so the cheapest sets the candidate's price; the rest stay in
+ * order as fallbacks for when a source silently grants nothing.
  *
  * Costs start from mafia's cached historical prices. Fetching a live mall price
  * is a server round trip, so only the most promising `prewarm` candidates get
@@ -158,82 +252,93 @@ export function buildCandidates(
   prewarm = 0,
 ): CandidateBuild {
   const { target, options } = context;
-  const direction = directionOf(target);
-  const byEffect = usableByEffect(sources, context);
+  const active = turnsRemaining();
+  const contribution = contributionsToward(target, options);
 
   const build: CandidateBuild = {
     candidates: [],
-    sourceFor: new Map(),
-    fallbacks: new Map(),
-    shortfall: 0,
+    sourcesFor: new Map(),
+    shortfall: shortfallFor(target, options, active, contribution),
   };
 
-  const cost = (source: Source, active: number) => {
-    if (context.freeEffects.has(source.effect)) return 0;
-    return context.costMode === "meat-per-adventure"
-      ? source.meatPerAdventure()
-      : source.costFor(target.minTurns, active);
-  };
-
-  for (const [effect, granting] of byEffect) {
-    const active = haveEffect(effect);
-    const ranked = granting.slice().sort((a, b) => cost(a, active) - cost(b, active));
-    const contribution = direction * effectiveModifier(effect, target.modifier, options);
-
-    // Up, but not for long enough: the reading counts it and the goal outlives
-    // it, so it's a gap whether or not we end up extending it.
-    if (active > 0 && contribution > 0) build.shortfall += contribution;
+  for (const [effect, granting] of usableByEffect(sources, context, active)) {
+    const gain = contribution(effect);
 
     // Gaining this overwrites any rival already up, so only the difference is
-    // new — and if we're the ones relying on that rival, don't touch it. The old
-    // code wrote the whole group off the moment one member landed; pricing the
-    // swap instead means a better member can still displace a worse one.
+    // new — and if we are the ones relying on that rival, don't touch it. The
+    // old code wrote the whole group off the moment one member landed; pricing
+    // the swap instead means a better member can still displace a worse one.
     const rival = activeExclusionSibling(effect);
     if (rival && (context.freeEffects.has(rival) || context.done.has(rival))) continue;
-    const displaced = rival ? direction * effectiveModifier(rival, target.modifier, options) : 0;
 
-    const progress = contribution - displaced;
+    const progress = gain - (rival ? contribution(rival) : 0);
     if (progress <= 0) continue;
-    // `X efficiency` asks us to leave the expensive stuff alone.
-    if (
-      target.maxEfficiency !== null &&
-      ranked[0].efficiency(target, options) > target.maxEfficiency
-    ) {
-      continue;
-    }
 
-    const id = effect.name;
+    // Ranking is the expensive part, so it happens after the cheap rejections.
+    const ranked = rankByPrice(granting, context, active(effect));
+    if (tooInefficient(ranked.sources[0], target, gain)) continue;
+
     build.candidates.push({
-      id,
+      id: effect.name,
       progress,
-      cost: cost(ranked[0], active),
+      cost: ranked.price,
       group: exclusionGroupId(effect),
       slot: isSongEffect(effect) ? SONG_SLOT : undefined,
     });
-    build.sourceFor.set(id, ranked[0]);
-    build.fallbacks.set(id, ranked.slice(1));
+    build.sourcesFor.set(effect.name, ranked.sources);
   }
 
-  if (prewarm > 0) refreshFrontRunners(build, context, prewarm);
+  if (prewarm > 0) refreshFrontRunners(build, context, active, prewarm);
   return build;
 }
 
-/** What each target should assume the other targets are taking care of. */
-export interface SharedPlan {
-  /** Per target: effects some other target's plan already pays for. */
-  freeEffects: Set<Effect>[];
-  /** Per target: song slots the targets still to come are counting on. */
-  reservedSongSlots: number[];
+/** Look up live mall prices for the best-looking candidates and re-cost them. */
+function refreshFrontRunners(
+  build: CandidateBuild,
+  context: PlanContext,
+  active: (effect: Effect) => number,
+  count: number,
+): void {
+  const front = build.candidates
+    .slice()
+    .sort((a, b) => a.cost / a.progress - b.cost / b.progress)
+    .slice(0, count);
+
+  for (const candidate of front) {
+    // Only the source we would actually reach for is worth a live lookup. A
+    // fallback is consulted only when the primary silently grants nothing, and
+    // pricing every one of them turns 20 round trips into hundreds.
+    const sources = build.sourcesFor.get(candidate.id);
+    if (sources && sources.length > 0) sources[0].warmPrice(context.canAccessMall);
+  }
+
+  for (const candidate of front) {
+    const sources = build.sourcesFor.get(candidate.id);
+    if (!sources || sources.length === 0) continue;
+    const ranked = rankByPrice(sources, context, active(sources[0].effect));
+    build.sourcesFor.set(candidate.id, ranked.sources);
+    candidate.cost = ranked.price;
+  }
 }
 
-function emptySharedPlan(count: number): SharedPlan {
-  const freeEffects: Set<Effect>[] = [];
-  const reservedSongSlots: number[] = [];
-  for (let i = 0; i < count; i++) {
-    freeEffects.push(new Set());
-    reservedSongSlots.push(0);
-  }
-  return { freeEffects, reservedSongSlots };
+/** The question this target is asking the solver, given what we just costed. */
+export function solveRequestFor(build: CandidateBuild, context: PlanContext): SolveRequest {
+  return {
+    candidates: build.candidates,
+    // Effects that expire before `minTurns` are in the reading but will not
+    // last, so their contribution counts against us until something replaces it.
+    need: needFor(context.target) + build.shortfall,
+    budget: budgetFor(context.target, context.options, context.state),
+    slotCapacity: { [SONG_SLOT]: context.freeSongSlots },
+  };
+}
+
+/** What one target should assume the other targets are taking care of. */
+export interface SharedContext {
+  /** Effects some other target's plan already pays for. */
+  freeEffects: Set<Effect>;
+  /** Song slots the targets still to come are counting on. */
+  reservedSongSlots: number;
 }
 
 /**
@@ -255,24 +360,29 @@ export function planShared(
   sourcesPer: Source[][],
   options: GainOptions,
   state: RunState,
-): SharedPlan {
-  if (targets.length < 2) return emptySharedPlan(targets.length);
+): SharedContext[] {
+  const nothingShared = targets.map(() => ({
+    freeEffects: new Set<Effect>(),
+    reservedSongSlots: 0,
+  }));
+  if (targets.length < 2) return nothingShared;
 
-  const contextFor = (index: number, freeEffects: Set<Effect>): PlanContext => ({
-    target: targets[index],
+  const canAccessMall = get("autoSatisfyWithMall", false);
+  const slots = freeSongSlots();
+  const contexts = targets.map((target) => ({
+    target,
     options,
     state,
-    canAccessMall: get("autoSatisfyWithMall", false),
-    costMode: costModeFor(targets[index]),
-    freeSongSlots: freeSongSlots(),
-    freeEffects,
-    done: new Set(),
-  });
+    canAccessMall,
+    freeSongSlots: slots,
+    freeEffects: new Set<Effect>(),
+    done: new Set<Effect>(),
+  }));
 
-  const none = new Set<Effect>();
-  const builds = targets.map((_, i) => buildCandidates(sourcesPer[i], contextFor(i, none)));
+  // One sweep of the sources per target — the expensive part. Both rounds below
+  // re-price what it found rather than asking mafia again.
+  const builds = targets.map((_, i) => buildCandidates(sourcesPer[i], contexts[i]));
 
-  // How many of our targets each effect could help, for the round-one discount.
   const serves = new Map<string, number>();
   for (const build of builds) {
     for (const candidate of build.candidates) {
@@ -280,84 +390,44 @@ export function planShared(
     }
   }
 
-  const unionExcept = (chosen: Set<Effect>[], skip: number, upTo = chosen.length) => {
-    const union = new Set<Effect>();
-    for (let i = 0; i < upTo; i++) {
+  const solveWith = (index: number, free: Set<string>, discount: boolean) => {
+    const build = builds[index];
+    const request = solveRequestFor(build, contexts[index]);
+    request.candidates = build.candidates.map((candidate) => {
+      const cost = free.has(candidate.id)
+        ? 0
+        : discount
+          ? candidate.cost / Math.max(1, serves.get(candidate.id) ?? 1)
+          : candidate.cost;
+      return cost === candidate.cost ? candidate : { ...candidate, cost };
+    });
+    return new Set(solve(request).chosen.map((candidate) => candidate.id));
+  };
+
+  const unionExcept = (chosen: Set<string>[], skip: number) => {
+    const union = new Set<string>();
+    for (let i = 0; i < chosen.length; i++) {
       if (i === skip) continue;
-      for (const effect of chosen[i]) union.add(effect);
+      for (const id of chosen[i]) union.add(id);
     }
     return union;
   };
 
-  const solveFor = (index: number, free: Set<Effect>, discount: boolean) => {
-    const context = contextFor(index, free);
-    const build = buildCandidates(sourcesPer[index], context);
-    const candidates = discount
-      ? build.candidates.map((candidate) => ({
-          ...candidate,
-          cost: candidate.cost / Math.max(1, serves.get(candidate.id) ?? 1),
-        }))
-      : build.candidates;
-    const result = solve({
-      candidates,
-      need: needFor(targets[index]),
-      budget: budgetFor(targets[index], options, state),
-      slotCapacity: { [SONG_SLOT]: context.freeSongSlots },
-    });
-    return new Set(result.chosen.map((candidate) => Effect.get(candidate.id)));
-  };
-
   // Round one, at a discount, each target seeing what the earlier ones took.
-  const draft: Set<Effect>[] = [];
-  for (let i = 0; i < targets.length; i++) {
-    draft.push(solveFor(i, unionExcept(draft, i), true));
-  }
+  const draft: Set<string>[] = [];
+  for (let i = 0; i < targets.length; i++) draft.push(solveWith(i, unionExcept(draft, i), true));
   // Round two, at honest prices, each target seeing every other target's picks.
-  const chosen = targets.map((_, i) => solveFor(i, unionExcept(draft, i), false));
+  const chosen = targets.map((_, i) => solveWith(i, unionExcept(draft, i), false));
 
-  const shared = emptySharedPlan(targets.length);
-  for (let i = 0; i < targets.length; i++) {
-    shared.freeEffects[i] = unionExcept(chosen, i);
-    // Only targets still to come need their slots held; earlier ones have
-    // already cast, and their songs show up in the live count instead.
-    let reserved = 0;
+  return targets.map((_, i) => {
+    const freeEffects = new Set<Effect>();
+    for (const id of unionExcept(chosen, i)) freeEffects.add(Effect.get(id));
+    // Only targets still to come need slots held; earlier ones have already
+    // cast, and their songs show up in the live count instead.
+    let reservedSongSlots = 0;
     for (let later = i + 1; later < targets.length; later++) {
-      for (const effect of chosen[later]) if (isSongEffect(effect)) reserved++;
+      for (const id of chosen[later]) if (isSongEffect(Effect.get(id))) reservedSongSlots++;
     }
-    shared.reservedSongSlots[i] = reserved;
-  }
-  return shared;
-}
-
-/** Look up live mall prices for the best-looking candidates and re-cost them. */
-function refreshFrontRunners(build: CandidateBuild, context: PlanContext, count: number): void {
-  const front = build.candidates
-    .slice()
-    .sort((a, b) => a.cost / a.progress - b.cost / b.progress)
-    .slice(0, count);
-
-  for (const candidate of front) {
-    const source = build.sourceFor.get(candidate.id);
-    if (!source) continue;
-    source.warmPrice(context.canAccessMall);
-    for (const fallback of build.fallbacks.get(candidate.id) ?? []) {
-      fallback.warmPrice(context.canAccessMall);
-    }
-  }
-
-  const active = 0; // Front-runners are candidates, so none of them is up yet.
-  const priceOf = (source: Source) =>
-    context.costMode === "meat-per-adventure"
-      ? source.meatPerAdventure()
-      : source.costFor(context.target.minTurns, active);
-
-  for (const candidate of front) {
-    const ranked = [build.sourceFor.get(candidate.id), ...(build.fallbacks.get(candidate.id) ?? [])]
-      .filter((source): source is Source => source !== undefined)
-      .sort((a, b) => priceOf(a) - priceOf(b));
-    if (ranked.length === 0) continue;
-    build.sourceFor.set(candidate.id, ranked[0]);
-    build.fallbacks.set(candidate.id, ranked.slice(1));
-    if (!context.freeEffects.has(ranked[0].effect)) candidate.cost = priceOf(ranked[0]);
-  }
+    return { freeEffects, reservedSongSlots };
+  });
 }

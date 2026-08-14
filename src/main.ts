@@ -1,7 +1,14 @@
 import { canInteract, myAdventures, print, printHtml } from "kolmafia";
 
 import { describeGoals, parseCommand, printUsage } from "./cli";
-import { NO_MEAT_LIMIT, newRunState, RunState, Target } from "./options";
+import {
+  GainOptions,
+  newRunState,
+  NO_MEAT_LIMIT,
+  OPEN_ENDED_MEAT_LIMIT,
+  RunState,
+  Target,
+} from "./options";
 import { currentValue, needFor, planShared } from "./plan";
 import { buildRestrictions } from "./restrictions";
 import { sourcesFor } from "./sources";
@@ -13,6 +20,21 @@ const VERSION = "2.0.0";
 /** Printed before anything else, so `embiggen help` says which build this is. */
 function printBanner(): void {
   printHtml(`embiggen v${VERSION}`);
+}
+
+/**
+ * How much `RunState.meatSpent` may reach by the time this goal is done.
+ *
+ * Each goal gets an even slice of what's left, so one that can never be
+ * satisfied cannot swallow the whole budget; whatever it doesn't spend rolls on
+ * to the next. A goal with no target value has nothing else to stop it, so it
+ * gets a rail of its own — applied here rather than by clamping the run-wide
+ * budget every other goal is working to.
+ */
+function capFor(goal: Target, options: GainOptions, state: RunState, remaining: number): number {
+  const share = (options.maxMeatToSpend - state.meatSpent) / remaining;
+  const railed = goal.value === null && options.maxMeatToSpend === NO_MEAT_LIMIT;
+  return state.meatSpent + (railed ? Math.min(share, OPEN_ENDED_MEAT_LIMIT) : share);
 }
 
 /** What we actually ended up with, against what was asked for. */
@@ -47,6 +69,11 @@ export function main(input: string): void {
     printBanner();
     if (options.maxMeatToSpend !== NO_MEAT_LIMIT) {
       printHtml(`Spending up to ${formatNumber(options.maxMeatToSpend)} meat in total.`);
+    } else if (targets.some(({ value }) => value === null)) {
+      printHtml(
+        `Spending up to ${formatNumber(OPEN_ENDED_MEAT_LIMIT)} meat on each goal with no ` +
+          `target value. Raise it with <strong>X totalmeat</strong>.`,
+      );
     }
     if (maxEfficiency !== null) printHtml(`${formatNumber(maxEfficiency)} efficiency`);
     if (meatPerAdventureLimit > 0) {
@@ -92,27 +119,22 @@ export function main(input: string): void {
     reasonableTurns,
     maxEfficiency,
     meatPerAdventureLimit: perTargetMeatLimit,
-    meatCap: options.maxMeatToSpend,
+    meatCap: NO_MEAT_LIMIT,
   }));
+  for (let i = 0; i < goals.length; i++)
+    goals[i].meatCap = capFor(goals[i], options, state, goals.length);
 
   // Work out up front which effects serve more than one goal, so no goal turns
   // down a buff that only pays for itself once another goal shares the bill.
+  // Caps are set first, so this plans against the budgets execution will have.
   const sourcesPer = goals.map((goal) => sourcesFor(goal, options, restrictions));
   const shared = planShared(goals, sourcesPer, options, state);
 
   for (let i = 0; i < goals.length; i++) {
-    // Hand each goal an even slice of what's left, so an impossible one can't
-    // swallow the whole budget. Anything it doesn't spend rolls on to the next.
-    const remaining = goals.length - i;
-    goals[i].meatCap = state.meatSpent + (options.maxMeatToSpend - state.meatSpent) / remaining;
-    raiseModifier(
-      goals[i],
-      options,
-      state,
-      sourcesPer[i],
-      shared.freeEffects[i],
-      shared.reservedSongSlots[i],
-    );
+    // Re-derived as we go, so whatever an earlier goal didn't spend rolls on.
+    goals[i].meatCap = capFor(goals[i], options, state, goals.length - i);
+    const { freeEffects, reservedSongSlots } = shared[i];
+    raiseModifier(goals[i], options, state, sourcesPer[i], freeEffects, reservedSongSlots);
   }
 
   if (options.silent) return;

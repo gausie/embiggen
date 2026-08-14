@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { Candidate, SolveRequest, solve, solveGreedy } from "../src/solver";
+import { Candidate, SolveRequest, solve } from "../src/solver";
+
+import { solveGreedy } from "./greedy";
 
 /** Deterministic PRNG so a failure is reproducible from its seed. */
 function random(seed: number): () => number {
@@ -129,7 +131,7 @@ describe("solve, against exhaustive search", () => {
   });
 });
 
-describe("solve, against the greedy fallback", () => {
+describe("solve, against the greedy reference", () => {
   it("is never more expensive than the greedy when both succeed", () => {
     let bothSolved = 0;
     let strictlyBetter = 0;
@@ -169,7 +171,7 @@ describe("solve, at realistic scale", () => {
       });
     }
 
-    // The shape `embiggen item` produces: a sentinel target on a tight budget.
+    // The shape `embiggen item` produces: unbounded demand, tight budget.
     const request: SolveRequest = { candidates, need: 1000000, budget: 10000 };
     const result = solve(request);
 
@@ -178,7 +180,7 @@ describe("solve, at realistic scale", () => {
     expect(result.reason).toBe("budget-capped");
     expect(result.cost).toBeLessThanOrEqual(10000);
     expect(result.progress).toBeGreaterThan(0);
-    // Reality bounds the table, not the 1,000,000 sentinel.
+    // Reality bounds the table, not the size of the goal.
     expect(result.stats.cells).toBeLessThanOrEqual(1500);
 
     // The same candidates, asked for something reachable, are solved outright.

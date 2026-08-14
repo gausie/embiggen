@@ -141,16 +141,16 @@ export function exclusionGroupId(effect: Effect): string | undefined {
   return EXCLUSION_GROUPS.get(effect)?.id;
 }
 
-/** The sibling already up in this effect's group, if any. */
+/**
+ * The sibling already up in this effect's group, if any.
+ *
+ * Gaining the effect would overwrite that sibling, so the planner prices the
+ * swap at the difference rather than writing the whole group off.
+ */
 export function activeExclusionSibling(effect: Effect): Effect | undefined {
   const group = EXCLUSION_GROUPS.get(effect);
   if (!group) return undefined;
   return group.members.find((member) => member !== effect && haveEffect(member) > 0);
-}
-
-/** True if a sibling in the effect's mutual-exclusion group is already active. */
-export function mutuallyExcluded(effect: Effect): boolean {
-  return activeExclusionSibling(effect) !== undefined;
 }
 
 /** Turtle tamer blessings bounce each other, so never recast over an active one. */

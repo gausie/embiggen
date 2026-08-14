@@ -10,15 +10,7 @@ import {
 import { get } from "libram";
 
 import { directionOf, GainOptions, RunState, Target } from "./options";
-import {
-  budgetFor,
-  buildCandidates,
-  costModeFor,
-  freeSongSlots,
-  needFor,
-  PlanContext,
-  SONG_SLOT,
-} from "./plan";
+import { buildCandidates, freeSongSlots, PlanContext, solveRequestFor } from "./plan";
 import { solve, SolveResult } from "./solver";
 import { Source } from "./sources";
 import { formatNumber } from "./util";
@@ -28,12 +20,6 @@ const PREWARM_COUNT = 20;
 
 /** How many times we re-plan after the world fails to match the plan. */
 const MAX_REPLANS = 12;
-
-/**
- * Notional meat charged per effect chosen. Raising it trades meat for fewer,
- * larger buffs — fewer server hits and less effect churn. Off by default.
- */
-const PER_EFFECT_PENALTY = 0;
 
 interface StepResult {
   turns: number;
@@ -126,7 +112,6 @@ export function raiseModifier(
     options,
     state,
     canAccessMall,
-    costMode: costModeFor(target),
     freeSongSlots: freeSongSlots(reservedSongSlots),
     freeEffects,
     done,
@@ -136,20 +121,11 @@ export function raiseModifier(
     const context = contextNow();
     const started = gametimeToInt();
     const build = buildCandidates(sources, context, PREWARM_COUNT);
+    const request = solveRequestFor(build, context);
+    if (request.need <= 0) return;
 
-    // Effects that expire before `minTurns` are in the reading but won't last,
-    // so their contribution counts against us until something replaces them.
-    const need = needFor(target) + build.shortfall;
-    if (need <= 0) return;
-
-    const result = solve({
-      candidates: build.candidates,
-      need,
-      budget: budgetFor(target, options, state),
-      slotCapacity: { [SONG_SLOT]: context.freeSongSlots },
-      perEffectPenalty: PER_EFFECT_PENALTY,
-    });
-    if (!options.silent) describePlan(result, target, need, gametimeToInt() - started);
+    const result = solve(request);
+    if (!options.silent) describePlan(result, target, request.need, gametimeToInt() - started);
 
     if (result.chosen.length === 0) {
       if (!options.silent) {
@@ -162,7 +138,7 @@ export function raiseModifier(
     let applied = 0;
     for (const candidate of result.chosen) {
       const effect = Effect.get(candidate.id);
-      const step = gainEffect(effect, sourcesFrom(build, candidate.id), context, target);
+      const step = gainEffect(effect, build.sourcesFor.get(candidate.id) ?? [], context, target);
       if (step.exhausted) {
         done.add(effect);
         continue;
@@ -175,13 +151,4 @@ export function raiseModifier(
     // plan was a prediction either way; the next lap re-measures and re-prices.
     if (applied === 0) return;
   }
-}
-
-function sourcesFrom(
-  build: { sourceFor: Map<string, Source>; fallbacks: Map<string, Source[]> },
-  id: string,
-): Source[] {
-  const first = build.sourceFor.get(id);
-  const rest = build.fallbacks.get(id) ?? [];
-  return first ? [first, ...rest] : rest;
 }

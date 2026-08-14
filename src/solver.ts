@@ -47,12 +47,6 @@ export interface SolveRequest {
   slotCapacity?: Record<string, number>;
   /** Cells along the DP's progress axis; higher is finer and slower. */
   maxCells?: number;
-  /**
-   * Notional meat charged per chosen effect, biasing toward fewer, larger buffs.
-   * Avoiding overshoot otherwise prefers three cheap effects to one big one,
-   * which costs server hits and effect churn even when it saves meat.
-   */
-  perEffectPenalty?: number;
 }
 
 export type SolveReason =
@@ -67,13 +61,13 @@ export type SolveReason =
 
 export interface SolveResult {
   chosen: Candidate[];
-  /** Exact float sum of `cost` over `chosen` — the penalty is not included. */
+  /** Exact float sum of `cost` over `chosen`. */
   cost: number;
   /** Exact float sum of `progress` over `chosen`. */
   progress: number;
   satisfied: boolean;
   reason: SolveReason;
-  /** For the instrumentation line. `cells`/`quantum` are zero for the greedy. */
+  /** For the instrumentation line. */
   stats: { candidates: number; cells: number; quantum: number };
 }
 
@@ -83,12 +77,11 @@ export interface Prepared {
   need: number;
   budget: number;
   slotCapacity: Record<string, number>;
-  penalty: number;
   /** Something was dropped only because it cost more than the whole budget. */
   budgetBound: boolean;
 }
 
-function capacityOf(capacities: Record<string, number>, slot: string): number {
+export function capacityOf(capacities: Record<string, number>, slot: string): number {
   const value = capacities[slot];
   return value === undefined ? Infinity : value;
 }
@@ -159,225 +152,63 @@ export function prepareCandidates(request: SolveRequest): Prepared {
     need: request.need,
     budget,
     slotCapacity,
-    penalty: Math.max(0, request.perEffectPenalty ?? 0),
     budgetBound,
   };
 }
 
-/** A partial plan under construction, with its constraint bookkeeping. */
-class Selection {
-  readonly chosen: Candidate[] = [];
-  cost = 0;
-  /** `cost` plus `perEffectPenalty` per entry; what choices are compared on. */
-  weight = 0;
-  progress = 0;
-  private readonly taken = new Set<string>();
-  private readonly usedGroups = new Set<string>();
-  private readonly usedSlots = new Map<string, number>();
-
-  constructor(private readonly prepared: Prepared) {}
-
-  /** Whether `candidate` can join this selection without breaking a constraint. */
-  admits(candidate: Candidate): boolean {
-    if (this.taken.has(candidate.id)) return false;
-    if (candidate.group !== undefined && this.usedGroups.has(candidate.group)) return false;
-    if (candidate.slot !== undefined) {
-      const used = this.usedSlots.get(candidate.slot) ?? 0;
-      if (used >= capacityOf(this.prepared.slotCapacity, candidate.slot)) return false;
-    }
-    return this.cost + candidate.cost <= this.prepared.budget + EPSILON;
-  }
-
-  add(candidate: Candidate): void {
-    this.chosen.push(candidate);
-    this.cost += candidate.cost;
-    this.weight += candidate.cost + this.prepared.penalty;
-    this.progress += candidate.progress;
-    this.taken.add(candidate.id);
-    if (candidate.group !== undefined) this.usedGroups.add(candidate.group);
-    if (candidate.slot !== undefined) {
-      this.usedSlots.set(candidate.slot, (this.usedSlots.get(candidate.slot) ?? 0) + 1);
-    }
-  }
-}
-
-interface Incumbent {
-  chosen: Candidate[];
-  cost: number;
-  weight: number;
-  progress: number;
-}
-
-function snapshot(selection: Selection, extra: Candidate | null, penalty: number): Incumbent {
-  if (!extra) {
-    return {
-      chosen: selection.chosen.slice(),
-      cost: selection.cost,
-      weight: selection.weight,
-      progress: selection.progress,
-    };
-  }
-  return {
-    chosen: [...selection.chosen, extra],
-    cost: selection.cost + extra.cost,
-    weight: selection.weight + extra.cost + penalty,
-    progress: selection.progress + extra.progress,
-  };
-}
-
-/**
- * Greedy min-cost cover: repeatedly take the best meat-per-point candidate, but
- * at every step also consider stopping with the single cheapest candidate that
- * closes the remaining gap on its own.
- *
- * That second arm is what stops the classic overshoot: plain ratio-greedy will
- * happily buy nine points of cheap buffs and then a tenth expensive one, when a
- * single mid-priced effect covered the whole gap. Keeping the best solution seen
- * across *all* steps (rather than only at the end) is the standard construction.
- *
- * Retained after `solve` landed: it is the fallback, and the oracle the DP is
- * differentially tested against.
- */
-export function solveGreedy(request: SolveRequest): SolveResult {
-  const prepared = prepareCandidates(request);
-  const { candidates, need, penalty } = prepared;
-
-  const selection = new Selection(prepared);
-  // Boxed so the closure below can update it without the compiler narrowing it.
-  const best: { incumbent: Incumbent | null } = { incumbent: null };
-  /* Some candidate was ruled out purely on price, so more budget would help. */
-  let priceBlocked = false;
-
-  const consider = (extra: Candidate | null) => {
-    const shot = snapshot(selection, extra, penalty);
-    if (shot.progress + EPSILON < need) return;
-    if (!best.incumbent || shot.weight < best.incumbent.weight - EPSILON) best.incumbent = shot;
-  };
-
-  for (;;) {
-    const remaining = need - selection.progress;
-    if (remaining <= EPSILON) {
-      consider(null);
-      break;
-    }
-
-    let closer: Candidate | null = null;
-    let pick: Candidate | null = null;
-    let pickRatio = Infinity;
-    for (const candidate of candidates) {
-      if (!selection.admits(candidate)) {
-        if (selection.cost + candidate.cost > prepared.budget + EPSILON) priceBlocked = true;
-        continue;
-      }
-      if (candidate.progress + EPSILON >= remaining && (!closer || candidate.cost < closer.cost)) {
-        closer = candidate;
-      }
-      // Credit only the progress we still need, so overshoot never looks cheap.
-      const ratio = (candidate.cost + penalty) / Math.min(candidate.progress, remaining);
-      if (ratio < pickRatio) {
-        pickRatio = ratio;
-        pick = candidate;
-      }
-    }
-
-    consider(closer);
-    if (!pick) break;
-    selection.add(pick);
-  }
-
-  const stats = { candidates: candidates.length, cells: 0, quantum: 0 };
-  const found = best.incumbent;
-  if (found) {
-    return {
-      chosen: found.chosen,
-      cost: found.cost,
-      progress: found.progress,
-      satisfied: true,
-      reason: "solved",
-      stats,
-    };
-  }
-
-  return {
-    chosen: selection.chosen.slice(),
-    cost: selection.cost,
-    progress: selection.progress,
-    satisfied: false,
-    reason: unsatisfiedReason(prepared, selection.chosen.length, priceBlocked),
-    stats,
-  };
-}
-
-function unsatisfiedReason(
-  prepared: Prepared,
-  chosenCount: number,
-  priceBlocked: boolean,
-): SolveReason {
+export function unsatisfiedReason(prepared: Prepared, priceBlocked: boolean): SolveReason {
   if (prepared.budgetBound || priceBlocked) return "budget-capped";
-  if (chosenCount === 0 && prepared.candidates.length === 0) return "empty";
+  if (prepared.candidates.length === 0) return "empty";
   return "unreachable";
 }
 
 /**
- * A limited slot class only needs a DP axis when more candidates compete for it
- * than there are slots. Songs affecting any one modifier rarely fill the rack,
- * so this usually costs nothing.
+ * The capacity-limited class the DP has to track, if any.
+ *
+ * A class only earns an axis when more candidates compete for it than there are
+ * slots; songs affecting any one modifier rarely fill the rack, so this usually
+ * costs nothing. Only one class is tracked, because KoL has only one — accordion
+ * songs. A second *binding* class would go unconstrained.
  */
-interface SlotAxes {
-  /** Slot class -> its place value in the mixed-radix slot state. */
-  place: Map<string, number>;
-  capacity: Map<string, number>;
-  states: number;
+interface SlotAxis {
+  slot: string;
+  capacity: number;
 }
 
-/** Beyond this many combined slot states, fall back to ignoring the constraint. */
-const MAX_SLOT_STATES = 16;
-
-function slotAxes(candidates: Candidate[], capacities: Record<string, number>): SlotAxes {
+function bindingSlot(candidates: Candidate[], capacities: Record<string, number>): SlotAxis | null {
   const counts = new Map<string, number>();
   for (const candidate of candidates) {
     if (candidate.slot === undefined) continue;
     counts.set(candidate.slot, (counts.get(candidate.slot) ?? 0) + 1);
   }
-
-  const place = new Map<string, number>();
-  const capacity = new Map<string, number>();
-  let states = 1;
   for (const [slot, count] of counts) {
-    const limit = capacityOf(capacities, slot);
-    if (!isFinite(limit) || count <= limit) continue;
-    if (states * (limit + 1) > MAX_SLOT_STATES) continue;
-    place.set(slot, states);
-    capacity.set(slot, limit);
-    states *= limit + 1;
+    const capacity = capacityOf(capacities, slot);
+    if (isFinite(capacity) && count > capacity) return { slot, capacity };
   }
-  return { place, capacity, states };
+  return null;
 }
 
 /** The most progress any valid selection could make, respecting the constraints. */
-function achievableProgress(candidates: Candidate[], axes: SlotAxes): number {
+function achievableProgress(candidates: Candidate[], axis: SlotAxis | null): number {
   const groupBest = new Map<string, number>();
-  const bySlot = new Map<string, number[]>();
+  const slotted: number[] = [];
   let total = 0;
 
   for (const candidate of candidates) {
     if (candidate.group !== undefined) {
       const current = groupBest.get(candidate.group) ?? 0;
       if (candidate.progress > current) groupBest.set(candidate.group, candidate.progress);
-    } else if (candidate.slot !== undefined && axes.place.has(candidate.slot)) {
-      const seen = bySlot.get(candidate.slot);
-      if (seen) seen.push(candidate.progress);
-      else bySlot.set(candidate.slot, [candidate.progress]);
+    } else if (axis && candidate.slot === axis.slot) {
+      slotted.push(candidate.progress);
     } else {
       total += candidate.progress;
     }
   }
 
   for (const best of groupBest.values()) total += best;
-  for (const [slot, progresses] of bySlot) {
-    const limit = axes.capacity.get(slot) ?? progresses.length;
-    progresses.sort((a, b) => b - a);
-    for (let i = 0; i < Math.min(limit, progresses.length); i++) total += progresses[i];
+  if (axis) {
+    slotted.sort((a, b) => b - a);
+    for (let i = 0; i < Math.min(axis.capacity, slotted.length); i++) total += slotted[i];
   }
   return total;
 }
@@ -420,12 +251,12 @@ function layerOrder(candidates: Candidate[]): { items: Candidate[]; groupStart: 
  * cell, and "spend up to N meat" reads the highest cell still within budget.
  *
  * The table is bounded by what is physically achievable rather than by the
- * goal, which is what keeps `embiggen item` — parsed as a target of 1,000,000 —
- * from asking for a million cells.
+ * goal, so an open-ended goal — `need` of `Infinity` — costs no more than a
+ * modest one.
  */
 export function solve(request: SolveRequest): SolveResult {
   const prepared = prepareCandidates(request);
-  const { candidates, need, budget, penalty } = prepared;
+  const { candidates, need, budget } = prepared;
 
   if (need <= EPSILON || candidates.length === 0) {
     return {
@@ -433,14 +264,15 @@ export function solve(request: SolveRequest): SolveResult {
       cost: 0,
       progress: 0,
       satisfied: need <= EPSILON,
-      reason: need <= EPSILON ? "solved" : unsatisfiedReason(prepared, 0, false),
+      reason: need <= EPSILON ? "solved" : unsatisfiedReason(prepared, false),
       stats: { candidates: candidates.length, cells: 0, quantum: 0 },
     };
   }
 
   const maxCells = Math.max(1, Math.floor(request.maxCells ?? DEFAULT_MAX_CELLS));
-  const axes = slotAxes(candidates, prepared.slotCapacity);
-  const rawCap = Math.min(need, achievableProgress(candidates, axes));
+  const axis = bindingSlot(candidates, prepared.slotCapacity);
+  const states = axis ? axis.capacity + 1 : 1;
+  const rawCap = Math.min(need, achievableProgress(candidates, axis));
   const { items, groupStart } = layerOrder(candidates);
 
   // Round gains DOWN and the goal UP, so a plan the table believes covers the
@@ -455,22 +287,17 @@ export function solve(request: SolveRequest): SolveResult {
     quantum /= 2;
   }
 
-  // `best[state * width + j]`: least cost to move `j` quantised points while
-  // having consumed the slots that `state` encodes. Slot state 0 is the start.
+  // `best[state * width + j]`: least cost to move `j` quantised points having
+  // used `state` of the limited slots. Slot state 0 is the start.
   const width = cells + 1;
   const best: number[] = [];
-  for (let i = 0; i < axes.states * width; i++) best.push(Infinity);
+  for (let i = 0; i < states * width; i++) best.push(Infinity);
   best[0] = 0;
 
-  // How many slots a layer consumes, as an offset in the mixed-radix state.
-  const slotPlace = items.map((item) =>
-    item.slot === undefined ? 0 : (axes.place.get(item.slot) ?? 0),
-  );
-  const slotLimit = items.map((item) =>
-    item.slot === undefined ? 0 : (axes.capacity.get(item.slot) ?? 0),
-  );
+  // 1 for a layer that consumes a slot, 0 otherwise.
+  const slotStep = items.map((item) => (axis && item.slot === axis.slot ? 1 : 0));
 
-  const words = Math.ceil((axes.states * width) / 32);
+  const words = Math.ceil((states * width) / 32);
   const used: number[] = [];
   for (let i = 0; i < items.length * words; i++) used.push(0);
   const mark = (layer: number, at: number) => {
@@ -493,16 +320,15 @@ export function solve(request: SolveRequest): SolveResult {
 
     const step = steps[layer];
     if (step <= 0) continue;
-    const weight = items[layer].cost + penalty;
+    const weight = items[layer].cost;
     const source = groupSnapshot ?? best;
-    const place = slotPlace[layer];
-    const limit = slotLimit[layer];
+    const takesSlot = slotStep[layer];
 
-    for (let state = axes.states - 1; state >= 0; state--) {
-      // Taking this item advances its slot digit, so it must have room.
-      if (place > 0 && Math.floor(state / place) % (limit + 1) >= limit) continue;
+    for (let state = states - 1; state >= 0; state--) {
+      // Taking this item uses a slot, so there has to be one spare.
+      if (takesSlot > 0 && axis && state >= axis.capacity) continue;
       const from = state * width;
-      const to = (state + place) * width;
+      const to = (state + takesSlot) * width;
       for (let j = cells; j >= 1; j--) {
         const previous = source[from + (j - step > 0 ? j - step : 0)];
         const candidate = previous + weight;
@@ -523,7 +349,7 @@ export function solve(request: SolveRequest): SolveResult {
       picked.push(items[layer]);
       const step = steps[layer];
       cell = cell - step > 0 ? cell - step : 0;
-      state -= slotPlace[layer];
+      state -= slotStep[layer];
       // A group member's predecessor is the state from before the whole group.
       if (groupStart[layer] !== -1) layer = groupStart[layer];
     }
@@ -548,7 +374,7 @@ export function solve(request: SolveRequest): SolveResult {
   let cheapest = Infinity;
   const scanFloor = Math.max(0, cells - RECONSTRUCT_SCAN);
   for (let j = cells; j >= scanFloor; j--) {
-    for (let state = 0; state < axes.states; state++) {
+    for (let state = 0; state < states; state++) {
       const weight = best[state * width + j];
       if (!isFinite(weight) || weight > budget + EPSILON || weight >= cheapest) continue;
       const set = reconstruct(j, state);
@@ -562,7 +388,7 @@ export function solve(request: SolveRequest): SolveResult {
   // Nothing covers the goal, so fall back to the most progress the budget buys.
   if (cheapest === Infinity) {
     for (let j = cells; j >= 1 && chosen.length === 0; j--) {
-      for (let state = 0; state < axes.states; state++) {
+      for (let state = 0; state < states; state++) {
         const weight = best[state * width + j];
         // An unreachable cell is `Infinity`, which an unlimited budget would
         // otherwise happily "afford".
@@ -582,7 +408,7 @@ export function solve(request: SolveRequest): SolveResult {
 
   // Short of the goal: say whether more meat would have helped.
   let topWeight = Infinity;
-  for (let state = 0; state < axes.states; state++) {
+  for (let state = 0; state < states; state++) {
     topWeight = Math.min(topWeight, best[state * width + cells]);
   }
   const priceBlocked = isFinite(topWeight) && topWeight > budget + EPSILON;
@@ -591,7 +417,7 @@ export function solve(request: SolveRequest): SolveResult {
     cost,
     progress,
     satisfied: false,
-    reason: unsatisfiedReason(prepared, chosen.length, priceBlocked),
+    reason: unsatisfiedReason(prepared, priceBlocked),
     stats,
   };
 }

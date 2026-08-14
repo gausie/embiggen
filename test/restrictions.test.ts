@@ -2,50 +2,50 @@ import { haveEffect } from "kolmafia";
 import { $effect } from "libram";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mutuallyExcluded } from "../src/restrictions";
+import { activeExclusionSibling } from "../src/restrictions";
 
 function activeEffects(...names: string[]) {
   vi.mocked(haveEffect).mockImplementation((effect) => (names.includes(effect.name) ? 10 : 0));
 }
 
-describe("mutuallyExcluded", () => {
+describe("activeExclusionSibling", () => {
   beforeEach(() => {
     activeEffects();
   });
 
-  it("is false with no rival effects active", () => {
-    expect(mutuallyExcluded($effect`Pasta Eyeball`)).toBe(false);
-    expect(mutuallyExcluded($effect`Legendary Pasta Eyeball`)).toBe(false);
+  it("finds nothing with no rival effects active", () => {
+    expect(activeExclusionSibling($effect`Pasta Eyeball`)).toBeUndefined();
+    expect(activeExclusionSibling($effect`Legendary Pasta Eyeball`)).toBeUndefined();
   });
 
-  it("is false for an effect in no exclusion group", () => {
+  it("finds nothing for an effect in no exclusion group", () => {
     activeEffects("Ode to Booze");
-    expect(mutuallyExcluded($effect`Ode to Booze`)).toBe(false);
+    expect(activeExclusionSibling($effect`Ode to Booze`)).toBeUndefined();
   });
 
-  it("is false when only the effect itself is active", () => {
+  it("does not count the effect itself", () => {
     activeEffects("Pasta Eyeball");
-    expect(mutuallyExcluded($effect`Pasta Eyeball`)).toBe(false);
+    expect(activeExclusionSibling($effect`Pasta Eyeball`)).toBeUndefined();
   });
 
-  it("excludes the legendary thrall buff when the plain one is active", () => {
+  it("finds the plain thrall buff behind its legendary form", () => {
     activeEffects("Pasta Eyeball");
-    expect(mutuallyExcluded($effect`Legendary Pasta Eyeball`)).toBe(true);
+    expect(activeExclusionSibling($effect`Legendary Pasta Eyeball`)).toBeDefined();
   });
 
-  it("excludes the plain thrall buff when the legendary one is active", () => {
+  it("finds the legendary thrall buff behind its plain form", () => {
     activeEffects("Legendary Spice Haze");
-    expect(mutuallyExcluded($effect`Spice Haze`)).toBe(true);
+    expect(activeExclusionSibling($effect`Spice Haze`)).toBeDefined();
   });
 
-  it("does not exclude across different thrall buffs", () => {
+  it("does not pair up different thrall buffs", () => {
     activeEffects("Legendary Spice Haze");
-    expect(mutuallyExcluded($effect`Pasta Eyeball`)).toBe(false);
-    expect(mutuallyExcluded($effect`Legendary Penne Fedora`)).toBe(false);
+    expect(activeExclusionSibling($effect`Pasta Eyeball`)).toBeUndefined();
+    expect(activeExclusionSibling($effect`Legendary Penne Fedora`)).toBeUndefined();
   });
 
-  it("still excludes within the pre-existing groups", () => {
+  it("still pairs up members of the pre-existing groups", () => {
     activeEffects("Wizard Squint");
-    expect(mutuallyExcluded($effect`Disco Leer`)).toBe(true);
+    expect(activeExclusionSibling($effect`Disco Leer`)).toBeDefined();
   });
 });

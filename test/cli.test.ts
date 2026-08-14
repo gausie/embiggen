@@ -2,7 +2,7 @@ import { $modifier, $modifiers } from "libram";
 import { describe, expect, it } from "vitest";
 
 import { parseCommand } from "../src/cli";
-import { NO_MEAT_LIMIT, OPEN_ENDED_MEAT_LIMIT } from "../src/options";
+import { NO_MEAT_LIMIT } from "../src/options";
 
 describe("parseCommand", () => {
   it("parses a single modifier target", () => {
@@ -49,17 +49,18 @@ describe("parseCommand", () => {
     expect(parseCommand("400 init").options.maxMeatToSpend).toBe(NO_MEAT_LIMIT);
   });
 
-  it("a bare modifier asks for as much as possible, on a rail", () => {
-    // No target value means nothing would stop the solver, so an open-ended
-    // goal gets a spending limit even though a normal one doesn't.
+  it("a bare modifier asks for as much as possible", () => {
+    // `null` is unbounded demand. The rail that stops it is applied per goal in
+    // main.ts, so parsing one bare modifier can't clamp the whole run's budget.
     const { targets, options } = parseCommand("ml");
     expect(targets).toEqual([{ modifier: $modifier`Monster Level`, value: null }]);
-    expect(options.maxMeatToSpend).toBe(OPEN_ENDED_MEAT_LIMIT);
+    expect(options.maxMeatToSpend).toBe(NO_MEAT_LIMIT);
   });
 
-  it("lets an explicit budget override the open-ended rail", () => {
-    expect(parseCommand("50000 totalmeat ml").options.maxMeatToSpend).toBe(50000);
-    expect(parseCommand("ml 50000 totalmeat").options.maxMeatToSpend).toBe(50000);
+  it("does not let a bare modifier tighten the budget for other goals", () => {
+    const { targets, options } = parseCommand("ml 400 init");
+    expect(targets.map(({ value }) => value)).toEqual([null, 400]);
+    expect(options.maxMeatToSpend).toBe(NO_MEAT_LIMIT);
   });
 
   it("totalmeat sets the cap", () => {
@@ -92,5 +93,24 @@ describe("parseCommand", () => {
     const { options } = parseCommand("silent absolute 400 init");
     expect(options.silent).toBe(true);
     expect(options.ignorePercentages).toBe(true);
+  });
+
+  it("keeps the goal when a standalone flag follows it", () => {
+    // Regression: a flag that takes no number used to clear the half-read
+    // modifier, so `embiggen item plan` parsed as no goal at all.
+    const plan = parseCommand("item plan");
+    expect(plan.targets).toEqual([{ modifier: $modifier`Item Drop`, value: null }]);
+    expect(plan.options.dryRun).toBe(true);
+
+    const trailing = parseCommand("400 init silent");
+    expect(trailing.targets).toEqual([{ modifier: $modifier`Initiative`, value: 400 }]);
+    expect(trailing.options.silent).toBe(true);
+
+    const between = parseCommand("item limited 400 init");
+    expect(between.targets).toEqual([
+      { modifier: $modifier`Item Drop`, value: null },
+      { modifier: $modifier`Initiative`, value: 400 },
+    ]);
+    expect(between.options.allowLimitedBuffs).toBe(true);
   });
 });

@@ -14,7 +14,6 @@ import {
   isUnrestricted,
   Item,
   mallPrice,
-  Modifier,
   mpCost,
   myClass,
   myHp,
@@ -101,21 +100,6 @@ export abstract class Source {
 
   meatPerAdventure(): number {
     return this.baseCost / this.turnsPerUse;
-  }
-
-  /**
-   * Meat per point of modifier per turn of effect — the number behind the
-   * `efficiency` command-line filter. Kept on roughly its historical scale
-   * (users have memorised values) but without the remaining-need clamp, which
-   * compared against the wrong reading of the modifier and never bit.
-   */
-  efficiency(target: Target, options: GainOptions): number {
-    const cost = this.baseCost;
-    if (cost <= 0) return 0;
-    const turns = Math.min(target.reasonableTurns, this.turnsPerUse);
-    const gained = effectiveModifier(this.effect, target.modifier, options);
-    const combined = gained * turns;
-    return combined === 0 ? Infinity : Math.abs(cost / combined);
   }
 }
 
@@ -308,7 +292,6 @@ export function sourcesFor(
   options: GainOptions,
   restrictions: Restrictions,
 ): Source[] {
-  const wantPositive = directionOf(target) > 0;
   const path = myPath().name;
   const context: CandidateContext = {
     inGLover: path === "G-Lover",
@@ -319,7 +302,7 @@ export function sourcesFor(
   };
 
   const sources: Source[] = [];
-  for (const effect of effectsMoving(target.modifier, wantPositive, options)) {
+  for (const effect of effectsFor(target, options)) {
     for (const item of itemsGranting(effect)) {
       if (isCandidateItem(item, effect, context)) {
         sources.push(new ItemSource(effect, item));
@@ -336,6 +319,11 @@ export function sourcesFor(
 
 const effectIndex = new Map<string, Effect[]>();
 
+/** Drop the memo below. Exists so tests can vary the game data between cases. */
+export function forgetEffectIndex(): void {
+  effectIndex.clear();
+}
+
 /**
  * Every effect that pushes `modifier` the wanted way, memoised for the session.
  *
@@ -345,7 +333,9 @@ const effectIndex = new Map<string, Effect[]>();
  * onto a live base stat, so only the membership is cached; `plan.ts` reads the
  * amounts fresh each time.
  */
-function effectsMoving(modifier: Modifier, wantPositive: boolean, options: GainOptions): Effect[] {
+export function effectsFor(target: Target, options: GainOptions): Effect[] {
+  const wantPositive = directionOf(target) > 0;
+  const modifier = target.modifier;
   const key = `${modifier}|${wantPositive}|${options.ignorePercentages}`;
   let cached = effectIndex.get(key);
   if (!cached) {
