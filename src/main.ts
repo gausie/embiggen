@@ -1,8 +1,8 @@
-import { canInteract, myAdventures, printHtml } from "kolmafia";
+import { canInteract, myAdventures, print, printHtml } from "kolmafia";
 
 import { describeGoals, parseCommand, printUsage } from "./cli";
-import { DEFAULT_MAX_MEAT, newRunState, Target } from "./options";
-import { planShared } from "./plan";
+import { DEFAULT_MAX_MEAT, newRunState, RunState, Target } from "./options";
+import { currentValue, needFor, planShared } from "./plan";
 import { buildRestrictions } from "./restrictions";
 import { sourcesFor } from "./sources";
 import { raiseModifier } from "./upkeep";
@@ -12,6 +12,19 @@ const VERSION = "2.0.0";
 /** Printed before anything else, so `embiggen help` says which build this is. */
 function printBanner(): void {
   printHtml(`embiggen v${VERSION}`);
+}
+
+/** What we actually ended up with, against what was asked for. */
+function printOutcome(goals: Target[], state: RunState): void {
+  for (const goal of goals) {
+    const value = Math.round(currentValue(goal.modifier) * 100) / 100;
+    const met = needFor(goal) <= 0;
+    print(
+      `${goal.modifier}: ${value} of ${goal.value}${met ? "" : " — short"}`,
+      met ? "green" : "red",
+    );
+  }
+  printHtml(`Spent ${Math.round(state.meatSpent)} meat.`);
 }
 
 export function main(input: string): void {
@@ -93,4 +106,8 @@ export function main(input: string): void {
       shared.reservedSongSlots[i],
     );
   }
+
+  if (options.silent) return;
+  if (options.dryRun) printHtml("Dry run: nothing was bought or cast.");
+  else printOutcome(goals, state);
 }
