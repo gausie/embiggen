@@ -31,7 +31,7 @@ import {
   use,
   useSkill,
 } from "kolmafia";
-import { $class, $effect, $item, $items, $slot, clamp, have, withProperty } from "libram";
+import { $class, $effect, $item, $items, $slot, clamp, get, have, withProperty } from "libram";
 
 import { effectiveModifier } from "./modifiers";
 import { directionOf, GainOptions, RunState, Target } from "./options";
@@ -45,6 +45,19 @@ import {
 
 /** Cap on uses of one source in a single step, inherited from the ASH version. */
 const MAX_USES = 10;
+
+/**
+ * The most we will pay for one copy of anything.
+ *
+ * mafia's own auto-buy ceiling, so the limit is whatever the user already told
+ * mafia rather than a number this script invented. `buy` with an explicit price
+ * bypasses the setting, so we have to apply it ourselves. Zero means no limit,
+ * matching how mafia reads it.
+ */
+function priceCeiling(): number {
+  const limit = get("autoBuyPriceLimit", 20000);
+  return limit > 0 ? limit : Infinity;
+}
 
 const HOLO_RECORDS = new Set(
   $items`Shrieking Weasel holo-record, Power-Guy 2000 holo-record, Lucky Strikes holo-record, EMD holo-record, Superdrifter holo-record, The Pigs holo-record, Drunk Uncles holo-record`,
@@ -148,7 +161,9 @@ class ItemSource extends Source {
     const owned = availableAmount(this.item);
     if (!this.item.tradeable && owned === 0) return false;
     if (owned === 0 && !canAccessMall) return false;
-    if (owned === 0 && this.item.tradeable && historicalPrice(this.item) >= 100000) return false;
+    if (owned === 0 && this.item.tradeable && historicalPrice(this.item) > priceCeiling()) {
+      return false;
+    }
     if (!this.item.tradeable && !this.item.reusable) return false;
     if (this.item.reusable && this.item.dailyusesleft === 0) return false;
     return true;
@@ -174,7 +189,6 @@ class ItemSource extends Source {
     let meatCost = 0;
     if (toBuy > 0) {
       if (!this.item.tradeable || !canAccessMall) return null;
-      if (historicalPrice(this.item) >= 100000) return null;
 
       // `retrievePrice` walks the listings, so this is what the whole batch
       // really costs rather than the cheapest listing multiplied out. The
@@ -192,6 +206,7 @@ class ItemSource extends Source {
         unitPrice = wishPrice;
         meatCost = wishPrice * toBuy;
       }
+      if (unitPrice > priceCeiling()) return null;
       // The goal's own slice as well as the run-wide limit, so a per-goal rail
       // still bites in a mode whose solver budget is denominated in something else.
       if (state.meatSpent + meatCost > Math.min(meatCap, options.maxMeatToSpend)) return null;
