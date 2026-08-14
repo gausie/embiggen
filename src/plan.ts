@@ -82,7 +82,9 @@ export function costModeFor(target: Target): CostMode {
 
 /** What this target may spend, in whatever currency it is planning in. */
 export function budgetFor(target: Target, options: GainOptions, state: RunState): number {
-  if (costModeFor(target) === "meat-per-adventure") return target.meatPerAdventureLimit;
+  if (costModeFor(target) === "meat-per-adventure") {
+    return Math.max(0, target.meatPerAdventureLimit - state.meatPerAdventureSpent);
+  }
   return Math.max(0, Math.min(target.meatCap, options.maxMeatToSpend) - state.meatSpent);
 }
 
@@ -210,6 +212,7 @@ export function buildCandidates(
   };
 
   for (const [effect, granting] of usableByEffect(sources, context)) {
+    const active = haveEffect(effect);
     const gain = contributionToward(effect, target, options);
 
     // Gaining this overwrites any rival already up, so only the difference is
@@ -218,12 +221,19 @@ export function buildCandidates(
     // the swap instead means a better member can still displace a worse one.
     const rival = activeExclusionSibling(effect);
     if (rival && (context.freeEffects.has(rival) || context.done.has(rival))) continue;
+    // Only a rival that outlasts the goal is really banked. One that expires
+    // first is already counted in `shortfall`, and charging for it here too
+    // would make displacing it look half as good as it is.
+    const displaced =
+      rival && haveEffect(rival) >= target.minTurns
+        ? contributionToward(rival, target, options)
+        : 0;
 
-    const progress = gain - (rival ? contributionToward(rival, target, options) : 0);
+    const progress = gain - displaced;
     if (progress <= 0) continue;
 
     // Ranking is the expensive part, so it happens after the cheap rejections.
-    const ranked = rankByPrice(granting, context, haveEffect(effect));
+    const ranked = rankByPrice(granting, context, active);
     if (tooInefficient(ranked.sources[0], target, gain)) continue;
 
     build.candidates.push({
@@ -231,7 +241,10 @@ export function buildCandidates(
       progress,
       cost: ranked.price,
       group: exclusionGroupId(effect),
-      slot: isSong(effect) ? SONG_SLOT : undefined,
+      // Renewing a song that's already up takes no new slot, and `freeSongSlots`
+      // has already discounted it from the rack. Claiming one anyway would make
+      // a full rack block the very renewal that keeps it full.
+      slot: isSong(effect) && active === 0 ? SONG_SLOT : undefined,
     });
     build.sourcesFor.set(effect.name, ranked.sources);
   }
@@ -362,15 +375,32 @@ export function planShared(
   // Round two, at honest prices, each target seeing every other target's picks.
   const chosen = targets.map((_, i) => solveWith(i, unionExcept(draft, i), false));
 
+  // The effect behind a candidate id, without round-tripping through the name —
+  // KoL has effects that share one.
+  const effectFor = (index: number, id: string) => builds[index].sourcesFor.get(id)?.[0]?.effect;
+
   return targets.map((_, i) => {
+    // Goals execute in order, so only an *earlier* goal's purchase is genuinely
+    // free to this one. Crediting a later goal's pick would leave whichever of
+    // them runs first paying for something neither plan budgeted.
     const freeEffects = new Set<Effect>();
-    for (const id of unionExcept(chosen, i)) freeEffects.add(Effect.get(id));
-    // Only targets still to come need slots held; earlier ones have already
-    // cast, and their songs show up in the live count instead.
-    let reservedSongSlots = 0;
-    for (let later = i + 1; later < targets.length; later++) {
-      for (const id of chosen[later]) if (isSong(Effect.get(id))) reservedSongSlots++;
+    for (let earlier = 0; earlier < i; earlier++) {
+      for (const id of chosen[earlier]) {
+        const effect = effectFor(earlier, id);
+        if (effect) freeEffects.add(effect);
+      }
     }
-    return { freeEffects, reservedSongSlots };
+
+    // Hold slots only for songs a later goal will have to cast itself: ones this
+    // goal isn't already casting, and that aren't up (a renewal takes no slot).
+    const reserved = new Set<string>();
+    for (let later = i + 1; later < targets.length; later++) {
+      for (const id of chosen[later]) {
+        if (chosen[i].has(id) || reserved.has(id)) continue;
+        const effect = effectFor(later, id);
+        if (effect && isSong(effect) && haveEffect(effect) === 0) reserved.add(id);
+      }
+    }
+    return { freeEffects, reservedSongSlots: reserved.size };
   });
 }

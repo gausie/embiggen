@@ -57,10 +57,18 @@ export function directionOf(target: Pick<Target, "value">): number {
 
 export interface RunState {
   meatSpent: number;
+  /**
+   * Meat committed per adventure of effect so far, against `meatperadventure`.
+   *
+   * Run-wide, because the limit is documented as shared across all effects —
+   * and because it has to survive the re-plan loop, which would otherwise hand
+   * out the whole allowance again on every pass.
+   */
+  meatPerAdventureSpent: number;
   /** Item/skill sources that granted nothing and shouldn't be retried this run. */
   blockedSources: Set<Item | Skill>;
 }
 
 export function newRunState(): RunState {
-  return { meatSpent: 0, blockedSources: new Set() };
+  return { meatSpent: 0, meatPerAdventureSpent: 0, blockedSources: new Set() };
 }

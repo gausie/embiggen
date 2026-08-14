@@ -110,7 +110,6 @@ export function main(input: string): void {
   const restrictions = buildRestrictions(options);
   const state = newRunState();
   const reasonableTurns = Math.max(minTurns, Math.min(myAdventures(), 20));
-  const perTargetMeatLimit = meatPerAdventureLimit / targets.length;
 
   const goals: Target[] = targets.map(({ modifier, value }) => ({
     modifier,
@@ -118,7 +117,7 @@ export function main(input: string): void {
     minTurns,
     reasonableTurns,
     maxEfficiency,
-    meatPerAdventureLimit: perTargetMeatLimit,
+    meatPerAdventureLimit,
     meatCap: NO_MEAT_LIMIT,
   }));
   for (let i = 0; i < goals.length; i++)

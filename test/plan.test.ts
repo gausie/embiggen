@@ -243,7 +243,55 @@ describe("buildCandidates", () => {
     expect(unlimited.candidates).toHaveLength(2);
   });
 
+  it("still renews a song when the rack is full", () => {
+    // A song that's already up takes no new slot to extend, and freeSongSlots
+    // has already discounted it. Claiming one anyway made a full rack block the
+    // very renewal keeping it full, while shortfall counted it against the goal.
+    gains.set("Fat Leon's Phat Loot Lyric|Item Drop", 20);
+    active.set("Fat Leon's Phat Loot Lyric", 10);
+    const source = new TestSource(
+      asSong($effect`Fat Leon's Phat Loot Lyric`),
+      10,
+      2,
+      $item`seal tooth`,
+    );
+
+    const build = buildCandidates(
+      [source],
+      context({ target: target({ minTurns: 100 }), freeSongSlots: 0 }),
+    );
+    expect(build.shortfall).toBe(20);
+    expect(build.candidates.map((c) => c.id)).toEqual(["Fat Leon's Phat Loot Lyric"]);
+    expect(build.candidates[0].slot).toBeUndefined();
+  });
+
+  it("claims a slot for a song that isn't up yet", () => {
+    gains.set("Fat Leon's Phat Loot Lyric|Item Drop", 20);
+    const source = new TestSource(
+      asSong($effect`Fat Leon's Phat Loot Lyric`),
+      10,
+      2,
+      $item`seal tooth`,
+    );
+
+    expect(buildCandidates([source], context()).candidates[0].slot).toBe(SONG_SLOT);
+  });
+
   describe("when a rival in the same exclusion group is already up", () => {
+    it("does not charge again for a rival that is about to expire", () => {
+      // Purple Tongue expires before minTurns, so shortfallFor already added its
+      // 8 back onto the need. Subtracting it from progress as well made
+      // displacing it look worth 12 when it is really worth the full 20.
+      gains.set("Blue Tongue|Item Drop", 20);
+      gains.set("Purple Tongue|Item Drop", 8);
+      active.set("Purple Tongue", 5);
+      const source = new TestSource($effect`Blue Tongue`, 10, 2, $item`seal tooth`);
+
+      const build = buildCandidates([source], context({ target: target({ minTurns: 50 }) }));
+      expect(build.shortfall).toBe(8);
+      expect(build.candidates[0].progress).toBe(20);
+    });
+
     it("counts only what displacing it would actually gain", () => {
       // Casting Blue Tongue overwrites Purple Tongue, so the net gain is 12, not
       // 20. The old code refused to touch the group at all once one was active.

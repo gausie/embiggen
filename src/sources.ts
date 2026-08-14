@@ -84,6 +84,7 @@ export abstract class Source {
     state: RunState,
     canAccessMall: boolean,
     uses?: number,
+    meatCap?: number,
   ): UsePlan | null;
   /** Do it, and report the meat it actually cost. */
   abstract apply(amount: number, plan: UsePlan): number;
@@ -153,9 +154,20 @@ class ItemSource extends Source {
     return true;
   }
 
-  plan(options: GainOptions, state: RunState, canAccessMall: boolean, uses = 1): UsePlan | null {
-    // Only the copies we don't already have need buying.
-    const toBuy = Math.max(0, uses - availableAmount(this.item));
+  plan(
+    options: GainOptions,
+    state: RunState,
+    canAccessMall: boolean,
+    uses = 1,
+    meatCap = Infinity,
+  ): UsePlan | null {
+    // Only the copies we don't already have need buying — and a reusable item
+    // serves every use from the one copy, so buying `uses` of it would be meat
+    // spent on nothing (and meat the solver scored at zero, since `baseCost`
+    // treats an owned reusable as free).
+    const owned = availableAmount(this.item);
+    const needed = this.item.reusable ? 1 : uses;
+    const toBuy = Math.max(0, needed - owned);
     let unitPrice = 0;
     let wish = false;
 
@@ -167,7 +179,6 @@ class ItemSource extends Source {
       // `retrievePrice` walks the listings, so this is what the whole batch
       // really costs rather than the cheapest listing multiplied out. The
       // ceiling for `buy` is then the price of the last copy in the batch.
-      const owned = availableAmount(this.item);
       meatCost = retrievePrice(this.item, owned + toBuy) - retrievePrice(this.item, owned);
       unitPrice =
         toBuy > 1
@@ -181,7 +192,9 @@ class ItemSource extends Source {
         unitPrice = wishPrice;
         meatCost = wishPrice * toBuy;
       }
-      if (state.meatSpent + meatCost > options.maxMeatToSpend) return null;
+      // The goal's own slice as well as the run-wide limit, so a per-goal rail
+      // still bites in a mode whose solver budget is denominated in something else.
+      if (state.meatSpent + meatCost > Math.min(meatCap, options.maxMeatToSpend)) return null;
     }
 
     if (!this.item.tradeable && !this.item.reusable) return null;

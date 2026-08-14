@@ -50,7 +50,7 @@ function gainEffect(
     if (before >= target.minTurns) return { turns: before, exhausted: false };
 
     const uses = source.usesFor(target.minTurns, before);
-    const plan = source.plan(options, state, context.canAccessMall, uses);
+    const plan = source.plan(options, state, context.canAccessMall, uses, target.meatCap);
     if (!plan) continue;
     if (plan.wish) abort(`wish for ${effect}`);
 
@@ -64,7 +64,12 @@ function gainEffect(
       refreshStatus();
       after = haveEffect(effect);
     }
-    if (after !== before) return { turns: after, exhausted: false };
+    if (after !== before) {
+      // Counted run-wide so the `meatperadventure` allowance survives re-planning
+      // rather than being handed out again on every pass.
+      state.meatPerAdventureSpent += source.meatPerAdventure();
+      return { turns: after, exhausted: false };
+    }
 
     if (!options.silent) printHtml(`${source.description} gained no turns; skipping it.`);
     state.blockedSources.add(source.key);
@@ -138,8 +143,12 @@ export function raiseModifier(
 
     let applied = 0;
     for (const candidate of result.chosen) {
-      const effect = Effect.get(candidate.id);
-      const step = gainEffect(effect, build.sourcesFor.get(candidate.id) ?? [], context, target);
+      // Take the effect from its own sources rather than re-resolving the name,
+      // which KoL lets more than one effect share.
+      const sources = build.sourcesFor.get(candidate.id) ?? [];
+      const effect = sources[0]?.effect;
+      if (!effect) continue;
+      const step = gainEffect(effect, sources, context, target);
       if (step.exhausted) {
         done.add(effect);
         continue;
