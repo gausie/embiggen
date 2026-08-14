@@ -5,6 +5,7 @@ import {
   GainOptions,
   newRunState,
   NO_MEAT_LIMIT,
+  OPEN_ENDED_EFFICIENCY,
   OPEN_ENDED_MEAT_LIMIT,
   RunState,
   Target,
@@ -116,7 +117,10 @@ export function main(input: string): void {
     value,
     minTurns,
     reasonableTurns,
-    maxEfficiency,
+    // An open-ended goal has nothing else to stop it, so it gets the default
+    // cap; one with a target value stops when it gets there, and capping it
+    // could reject the effect that would have closed the gap.
+    maxEfficiency: maxEfficiency ?? (value === null ? OPEN_ENDED_EFFICIENCY : null),
     meatPerAdventureLimit,
     meatCap: NO_MEAT_LIMIT,
   }));

@@ -10,6 +10,18 @@ export const NO_MEAT_LIMIT = Infinity;
 /** The rail on a bare modifier, which has no target value to stop it. */
 export const OPEN_ENDED_MEAT_LIMIT = 10000;
 
+/**
+ * Efficiency cap applied to a goal with no target value, unless the command
+ * gives one. `null` leaves such goals uncapped.
+ *
+ * A goal with a number stops when it reaches that number, so it needs no cap and
+ * must not have one — a filter there could reject the very effect that closes
+ * the gap and turn a run that used to succeed into one that reports itself
+ * short. Open-ended goals have no such stopping condition, so value for money is
+ * what keeps them sensible.
+ */
+export const OPEN_ENDED_EFFICIENCY: number | null = null;
+
 export interface GainOptions {
   silent: boolean;
   ignorePercentages: boolean;
