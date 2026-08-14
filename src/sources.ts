@@ -24,14 +24,13 @@ import {
   mySoulsauce,
   numericModifier,
   Skill,
-  setProperty,
   soulsauceCost,
   toEffect,
   turnsPerCast,
   use,
   useSkill,
 } from "kolmafia";
-import { $class, $effect, $item, $items, $slot, clamp, get, have } from "libram";
+import { $class, $effect, $item, $items, $slot, clamp, get, have, set } from "libram";
 
 import { effectiveModifier } from "./modifiers";
 import { directionOf, GainOptions, RunState, Target } from "./options";
@@ -67,15 +66,12 @@ export interface UsePlan {
  * asking, which would walk straight past the price ceiling we just set.
  */
 function withoutMallPurchases(action: () => void): void {
-  if (!get("autoSatisfyWithMall", false)) {
-    action();
-    return;
-  }
-  setProperty("autoSatisfyWithMall", "false");
+  const previous = get("autoSatisfyWithMall", false);
+  set("autoSatisfyWithMall", false);
   try {
     action();
   } finally {
-    setProperty("autoSatisfyWithMall", "true");
+    set("autoSatisfyWithMall", previous);
   }
 }
 
