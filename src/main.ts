@@ -9,8 +9,14 @@ import { raiseModifier } from "./upkeep";
 
 const VERSION = "2.0.0";
 
+/** Printed before anything else, so `embiggen help` says which build this is. */
+function printBanner(): void {
+  printHtml(`embiggen v${VERSION}`);
+}
+
 export function main(input: string): void {
   if (input.trim() === "" || input.includes("help")) {
+    printBanner();
     printUsage();
     return;
   }
@@ -19,7 +25,7 @@ export function main(input: string): void {
     parseCommand(input);
 
   if (!options.silent) {
-    printHtml(`embiggen v${VERSION}`);
+    printBanner();
     if (options.maxMeatToSpend !== DEFAULT_MAX_MEAT) {
       printHtml(`Spending up to ${options.maxMeatToSpend} meat.`);
     }
