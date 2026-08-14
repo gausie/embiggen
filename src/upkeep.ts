@@ -21,6 +21,7 @@ import {
 } from "./plan";
 import { solve, SolveResult } from "./solver";
 import { Source } from "./sources";
+import { formatNumber } from "./util";
 
 /** Candidates whose live mall price we look up before committing to a plan. */
 const PREWARM_COUNT = 20;
@@ -87,23 +88,22 @@ function gainEffect(
 
 /** Print what the solver decided and why it stopped where it did. */
 function describePlan(result: SolveResult, target: Target, need: number, elapsed: number): void {
-  const round = (value: number) => Math.round(value * 100) / 100;
   // With a goal, report where we land — measured off the gap rather than the
   // live reading, so effects that are up but about to expire aren't counted
   // twice. Open-ended, there is nothing to land on, so report the gain.
   const outcome =
     target.value === null
-      ? `+${round(result.progress)}`
-      : `reaching ${round(target.value - directionOf(target) * (need - result.progress))} ` +
-        `(${round(need)} to go)`;
+      ? `+${formatNumber(result.progress)}`
+      : `reaching ${formatNumber(target.value - directionOf(target) * (need - result.progress))} ` +
+        `(${formatNumber(need)} to go)`;
   printHtml(
-    `${target.modifier}: ${result.chosen.length} effects for ${Math.round(result.cost)} meat, ` +
+    `${target.modifier}: ${result.chosen.length} effects for ${formatNumber(result.cost)} meat, ` +
       `${outcome} [${result.reason}, ${result.stats.candidates} candidates, ${elapsed}ms]`,
   );
   for (const candidate of result.chosen) {
     printHtml(
-      `&nbsp;&nbsp;${candidate.id}: +${round(candidate.progress)} for ` +
-        `${Math.round(candidate.cost)} meat`,
+      `&nbsp;&nbsp;${candidate.id}: +${formatNumber(candidate.progress)} for ` +
+        `${formatNumber(candidate.cost)} meat`,
     );
   }
 }

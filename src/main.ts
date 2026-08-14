@@ -6,6 +6,7 @@ import { currentValue, needFor, planShared } from "./plan";
 import { buildRestrictions } from "./restrictions";
 import { sourcesFor } from "./sources";
 import { raiseModifier } from "./upkeep";
+import { formatNumber } from "./util";
 
 const VERSION = "2.0.0";
 
@@ -17,7 +18,7 @@ function printBanner(): void {
 /** What we actually ended up with, against what was asked for. */
 function printOutcome(goals: Target[], state: RunState): void {
   for (const goal of goals) {
-    const value = Math.round(currentValue(goal.modifier) * 100) / 100;
+    const value = formatNumber(currentValue(goal.modifier));
     // An open-ended goal can't fall short — it got whatever the budget bought.
     if (goal.value === null) {
       print(`${goal.modifier}: ${value}`, "blue");
@@ -25,11 +26,11 @@ function printOutcome(goals: Target[], state: RunState): void {
     }
     const met = needFor(goal) <= 0;
     print(
-      `${goal.modifier}: ${value} of ${goal.value}${met ? "" : " — short"}`,
+      `${goal.modifier}: ${value} of ${formatNumber(goal.value)}${met ? "" : " — short"}`,
       met ? "green" : "red",
     );
   }
-  printHtml(`Spent ${Math.round(state.meatSpent)} meat.`);
+  printHtml(`Spent ${formatNumber(state.meatSpent)} meat.`);
 }
 
 export function main(input: string): void {
@@ -45,11 +46,13 @@ export function main(input: string): void {
   if (!options.silent) {
     printBanner();
     if (options.maxMeatToSpend !== NO_MEAT_LIMIT) {
-      printHtml(`Spending up to ${options.maxMeatToSpend} meat in total.`);
+      printHtml(`Spending up to ${formatNumber(options.maxMeatToSpend)} meat in total.`);
     }
-    if (maxEfficiency !== null) printHtml(`${maxEfficiency} efficiency`);
+    if (maxEfficiency !== null) printHtml(`${formatNumber(maxEfficiency)} efficiency`);
     if (meatPerAdventureLimit > 0) {
-      printHtml(`${meatPerAdventureLimit} meat per adventure of effect, across all effects.`);
+      printHtml(
+        `${formatNumber(meatPerAdventureLimit)} meat per adventure of effect, across all effects.`,
+      );
     }
     if (!canInteract()) {
       printHtml("We're not in ronin, so we might break. I didn't test for this.");

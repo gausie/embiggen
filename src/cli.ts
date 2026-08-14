@@ -2,7 +2,7 @@ import { Modifier, myPrimestat, printHtml } from "kolmafia";
 import { $modifiers } from "libram";
 
 import { defaultOptions, GainOptions, NO_MEAT_LIMIT, OPEN_ENDED_MEAT_LIMIT } from "./options";
-import { parseNumber } from "./util";
+import { formatNumber, parseNumber } from "./util";
 
 /** Abbreviations mafia's own lookup won't recognise, mapped to canonical names. */
 const ALIASES: Record<string, string> = {
@@ -181,7 +181,7 @@ export function describeGoals(targets: ResolvedTarget[], minTurns: number): stri
     if (value === null) return `${modifier} as high as the budget allows`;
     const direction = value > 0 ? " up to " : " down to ";
     const suffix = SHOWN_AS_PERCENT.has(modifier) ? "%" : "";
-    return `${modifier}${direction}${value}${suffix}`;
+    return `${modifier}${direction}${formatNumber(value)}${suffix}`;
   });
   const turns = minTurns !== 1 ? `, for ${minTurns} turns` : "";
   return `Buffing ${parts.join(", ")}${turns}...`;
