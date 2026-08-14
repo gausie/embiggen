@@ -30,7 +30,7 @@ import {
   use,
   useSkill,
 } from "kolmafia";
-import { $class, $effect, $item, $items, $slot, clamp, get, have, set } from "libram";
+import { $class, $effect, $item, $items, $slot, clamp, have, withProperty } from "libram";
 
 import { effectiveModifier } from "./modifiers";
 import { directionOf, GainOptions, RunState, Target } from "./options";
@@ -57,22 +57,6 @@ export interface UsePlan {
   /** Copies we don't already own. */
   toBuy: number;
   wish: boolean;
-}
-
-/**
- * Run `action` with mall purchases switched off.
- *
- * `use` will otherwise top up whatever it is short of at whatever the mall is
- * asking, which would walk straight past the price ceiling we just set.
- */
-function withoutMallPurchases(action: () => void): void {
-  const previous = get("autoSatisfyWithMall", false);
-  set("autoSatisfyWithMall", false);
-  try {
-    action();
-  } finally {
-    set("autoSatisfyWithMall", previous);
-  }
 }
 
 /** A single way to gain an effect: either an item to use or a skill to cast. */
@@ -209,7 +193,9 @@ class ItemSource extends Source {
     const usable = Math.min(amount, availableAmount(this.item));
     if (usable <= 0) return spent;
 
-    withoutMallPurchases(() => {
+    // With the mall shut off, `use` cannot quietly top up what `buy` declined to
+    // overpay for; it can only spend what we already hold.
+    withProperty("autoSatisfyWithMall", false, () => {
       // Using more than one d12 at a time skips the effect, so pace them out.
       if (this.item === $item`d12`) {
         for (let i = 0; i < usable; i++) use(1, this.item);
