@@ -2,7 +2,9 @@ import { canInteract, myAdventures, printHtml } from "kolmafia";
 
 import { describeGoals, parseCommand, printUsage } from "./cli";
 import { DEFAULT_MAX_MEAT, newRunState, Target } from "./options";
+import { planShared } from "./plan";
 import { buildRestrictions } from "./restrictions";
+import { sourcesFor } from "./sources";
 import { raiseModifier } from "./upkeep";
 
 const VERSION = "1.0.0";
@@ -56,15 +58,33 @@ export function main(input: string): void {
   const reasonableTurns = Math.max(minTurns, Math.min(myAdventures(), 20));
   const perTargetMeatLimit = meatSpendPerTurnLimit / targets.length;
 
-  for (const { modifier, value } of targets) {
-    const target: Target = {
-      modifier,
-      value,
-      minTurns,
-      reasonableTurns,
-      maxEfficiency,
-      meatPerTurnLimit: perTargetMeatLimit,
-    };
-    raiseModifier(target, options, state, restrictions);
+  const goals: Target[] = targets.map(({ modifier, value }) => ({
+    modifier,
+    value,
+    minTurns,
+    reasonableTurns,
+    maxEfficiency,
+    meatPerTurnLimit: perTargetMeatLimit,
+    meatCap: options.maxMeatToSpend,
+  }));
+
+  // Work out up front which effects serve more than one goal, so no goal turns
+  // down a buff that only pays for itself once another goal shares the bill.
+  const sourcesPer = goals.map((goal) => sourcesFor(goal, options, restrictions));
+  const shared = planShared(goals, sourcesPer, options, state);
+
+  for (let i = 0; i < goals.length; i++) {
+    // Hand each goal an even slice of what's left, so an impossible one can't
+    // swallow the whole budget. Anything it doesn't spend rolls on to the next.
+    const remaining = goals.length - i;
+    goals[i].meatCap = state.meatSpent + (options.maxMeatToSpend - state.meatSpent) / remaining;
+    raiseModifier(
+      goals[i],
+      options,
+      state,
+      sourcesPer[i],
+      shared.freeEffects[i],
+      shared.reservedSongSlots[i],
+    );
   }
 }

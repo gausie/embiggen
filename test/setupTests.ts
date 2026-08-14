@@ -57,6 +57,13 @@ for (const [key, value] of Object.entries(kolmafia)) {
   vi.mocked(mockedClass.all).mockImplementation(() => knownInstances[key]);
 }
 
+// Buff skills grant an effect of the same name — true of every accordion song,
+// which is what `restrictions.ts` needs to index its song list at import time.
+vi.mocked(kolmafia).toEffect.mockImplementation(((thing: { name: string } | string | number) =>
+  kolmafia.Effect.get(
+    typeof thing === "object" ? thing.name : thing,
+  )) as unknown as typeof kolmafia.toEffect);
+
 vi.mocked(kolmafia).myPrimestat.mockImplementation(() => kolmafia.Stat.get("Muscle"));
 vi.mocked(kolmafia).print.mockImplementation(() => undefined);
 vi.mocked(kolmafia).printHtml.mockImplementation(() => undefined);

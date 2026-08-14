@@ -8,6 +8,8 @@ export interface GainOptions {
   ignorePercentages: boolean;
   allowLimitedBuffs: boolean;
   maxMeatToSpend: number;
+  /** Work out and print a plan, but buy and cast nothing. */
+  dryRun: boolean;
 }
 
 export function defaultOptions(): GainOptions {
@@ -16,6 +18,7 @@ export function defaultOptions(): GainOptions {
     ignorePercentages: false,
     allowLimitedBuffs: false,
     maxMeatToSpend: DEFAULT_MAX_MEAT,
+    dryRun: false,
   };
 }
 
@@ -26,6 +29,12 @@ export interface Target {
   reasonableTurns: number;
   maxEfficiency: number | null;
   meatPerTurnLimit: number;
+  /**
+   * Ceiling on `RunState.meatSpent` once this target is done. Splitting the
+   * budget stops a first target that can never be satisfied from spending
+   * everything before the rest are even looked at.
+   */
+  meatCap: number;
 }
 
 export interface RunState {

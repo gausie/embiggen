@@ -1,214 +1,184 @@
 import {
   abort,
   Effect,
-  familiarWeight,
+  gametimeToInt,
   haveEffect,
-  Modifier,
-  myBuffedstat,
-  myFamiliar,
-  myMaxhp,
-  myMaxmp,
-  numericModifier,
   print,
   printHtml,
   refreshStatus,
 } from "kolmafia";
-import { $modifier, $stat, clamp, get } from "libram";
+import { get } from "libram";
 
 import { GainOptions, RunState, Target } from "./options";
 import {
-  FIXED_BLOCKED_EFFECTS,
-  isSongEffect,
-  mutuallyExcluded,
-  Restrictions,
-  songSlotsFull,
-} from "./restrictions";
-import { Source, sourcesFor } from "./sources";
+  budgetFor,
+  buildCandidates,
+  costModeFor,
+  directionOf,
+  freeSongSlots,
+  needFor,
+  PlanContext,
+  SONG_SLOT,
+} from "./plan";
+import { solve, SolveResult } from "./solver";
+import { Source } from "./sources";
 
+/** Candidates whose live mall price we look up before committing to a plan. */
 const PREWARM_COUNT = 20;
-const MAX_ITERATIONS = 500;
 
-/** Live value of a modifier, reading buffed stats where mafia has no plain modifier. */
-function currentValue(modifier: Modifier): number {
-  switch (modifier) {
-    case $modifier`Muscle`:
-      return myBuffedstat($stat`Muscle`);
-    case $modifier`Mysticality`:
-      return myBuffedstat($stat`Mysticality`);
-    case $modifier`Moxie`:
-      return myBuffedstat($stat`Moxie`);
-    case $modifier`Maximum MP`:
-      return myMaxmp();
-    case $modifier`Maximum HP`:
-      return myMaxhp();
-    case $modifier`Familiar Weight`:
-      return numericModifier(modifier) + familiarWeight(myFamiliar());
-    default:
-      return numericModifier(modifier);
-  }
-}
+/** How many times we re-plan after the world fails to match the plan. */
+const MAX_REPLANS = 12;
 
-function satisfied(target: Target, value: number): boolean {
-  return target.value >= 0 ? target.value <= value : target.value >= value;
-}
+/**
+ * Notional meat charged per effect chosen. Raising it trades meat for fewer,
+ * larger buffs — fewer server hits and less effect churn. Off by default.
+ */
+const PER_EFFECT_PENALTY = 0;
 
-/** The purely effect-level reasons to skip a source this iteration. */
-function effectSkippable(
-  source: Source,
-  target: Target,
-  state: RunState,
-  satisfiedThisTarget: Set<Effect>,
-): boolean {
-  const { effect } = source;
-  const active = haveEffect(effect);
-  return (
-    state.blockedSources.has(source.key) ||
-    FIXED_BLOCKED_EFFECTS.has(effect) ||
-    satisfiedThisTarget.has(effect) ||
-    (isSongEffect(effect) && active === 0 && songSlotsFull()) ||
-    mutuallyExcluded(effect) ||
-    active >= target.minTurns
-  );
-}
-
-interface Scored {
-  source: Source;
-  efficiency: number;
-}
-
-/** Rank candidates by efficiency, warming and re-scoring the front-runners' prices. */
-function rankSources(
-  candidates: Source[],
-  target: Target,
-  options: GainOptions,
-  canAccessMall: boolean,
-): Scored[] {
-  const wantPositive = target.value >= 0;
-  const byEfficiency = (a: Scored, b: Scored) =>
-    wantPositive ? a.efficiency - b.efficiency : b.efficiency - a.efficiency;
-  const ranked: Scored[] = candidates.map((source) => ({
-    source,
-    efficiency: source.efficiency(target, options),
-  }));
-  ranked.sort(byEfficiency);
-  const frontRunners = ranked.slice(0, PREWARM_COUNT);
-  for (const { source } of frontRunners) source.warmPrice(canAccessMall);
-  for (const entry of frontRunners) {
-    entry.efficiency = entry.source.efficiency(target, options);
-  }
-  ranked.sort(byEfficiency);
-  return ranked;
-}
-
-interface GainResult {
-  /** The source silently granted nothing and has been blocked for the run. */
-  blocked: boolean;
-  /** Progress was made, so a stalled modifier value is tolerable next loop. */
-  allowStall: boolean;
+interface StepResult {
   turns: number;
+  /** Every source of this effect failed, so the effect itself is out of reach. */
+  exhausted: boolean;
 }
 
-/** Apply `source`, confirming it actually granted turns, and report the outcome. */
-function applyGain(
-  source: Source,
+/**
+ * Bring one effect up to `minTurns`, trying each source in turn.
+ *
+ * A source can silently grant nothing — a spent consumable, an exhausted
+ * limited buff, mafia being out of sync. When that happens we block that source
+ * and try another way to the same effect rather than giving up on the effect.
+ */
+function gainEffect(
+  effect: Effect,
+  sources: Source[],
+  context: PlanContext,
   target: Target,
-  state: RunState,
-  options: GainOptions,
-): GainResult {
-  const { effect } = source;
-  const before = haveEffect(effect);
-  const amount = clamp(
-    Math.ceil((target.minTurns - before) / Math.max(1, source.turnsPerUse)),
-    1,
-    10,
-  );
-  source.apply(amount);
+): StepResult {
+  const { options, state } = context;
 
-  let after = haveEffect(effect);
-  if (after !== before) {
-    return { blocked: false, allowStall: before !== 0 && after < 1000, turns: after };
+  for (const source of sources) {
+    if (state.blockedSources.has(source.key)) continue;
+
+    const before = haveEffect(effect);
+    if (before >= target.minTurns) return { turns: before, exhausted: false };
+
+    const uses = source.usesFor(target.minTurns, before);
+    const plan = source.plan(options, state, context.canAccessMall, uses);
+    if (!plan) continue;
+    if (plan.wish) abort(`wish for ${effect}`);
+
+    if (!options.silent) printHtml(`${source.description} x${uses}`);
+    source.apply(uses);
+    // The purchase has already happened, so charge for it however it went.
+    state.meatSpent += plan.meatCost;
+
+    let after = haveEffect(effect);
+    if (after === before) {
+      refreshStatus();
+      after = haveEffect(effect);
+    }
+    if (after !== before) return { turns: after, exhausted: false };
+
+    if (!options.silent) printHtml(`${source.description} gained no turns; skipping it.`);
+    state.blockedSources.add(source.key);
   }
 
-  // A source can silently grant zero turns (spent consumable, unavailable
-  // skill, exhausted limited buff); resync with KoL in case mafia is behind.
-  refreshStatus();
-  after = haveEffect(effect);
-  if (after !== before) {
-    return { blocked: false, allowStall: false, turns: after };
-  }
-
-  // Still nothing gained: block this source (not the whole effect — another
-  // source might work) and move on rather than aborting.
-  if (!options.silent) {
-    printHtml(`${source.description} gained no turns; skipping it.`);
-  }
-  state.blockedSources.add(source.key);
-  return { blocked: true, allowStall: false, turns: after };
+  return { turns: haveEffect(effect), exhausted: true };
 }
 
-/** Apply effect sources until `target` is met (or we run out of affordable options). */
+/** Print what the solver decided and why it stopped where it did. */
+function describePlan(result: SolveResult, target: Target, need: number, elapsed: number): void {
+  const round = (value: number) => Math.round(value * 100) / 100;
+  // Measured off the gap rather than the live reading, so effects that are up
+  // but about to expire aren't counted twice.
+  const projected = target.value - directionOf(target) * (need - result.progress);
+  printHtml(
+    `${target.modifier}: ${result.chosen.length} effects for ${Math.round(result.cost)} meat, ` +
+      `reaching ${round(projected)} (${round(need)} to go) ` +
+      `[${result.reason}, ${result.stats.candidates} candidates, ${elapsed}ms]`,
+  );
+  for (const candidate of result.chosen) {
+    printHtml(
+      `&nbsp;&nbsp;${candidate.id}: +${round(candidate.progress)} for ` +
+        `${Math.round(candidate.cost)} meat`,
+    );
+  }
+}
+
+/** Apply effect sources until `target` is met, or nothing affordable is left. */
 export function raiseModifier(
   target: Target,
   options: GainOptions,
   state: RunState,
-  restrictions: Restrictions,
+  sources: Source[],
+  freeEffects: Set<Effect> = new Set(),
+  reservedSongSlots = 0,
 ): void {
   const canAccessMall = get("autoSatisfyWithMall", false);
-  const candidates = sourcesFor(target, options, restrictions);
+  /** Effects we've finished with, whether they landed or turned out unusable. */
+  const done = new Set<Effect>();
 
-  const satisfiedThisTarget = new Set<Effect>();
-  let meatPerTurnUsed = 0;
-  let lastValue: number | null = null;
-  let allowStall = false;
+  const contextNow = (): PlanContext => ({
+    target,
+    options,
+    state,
+    canAccessMall,
+    costMode: costModeFor(target),
+    freeSongSlots: freeSongSlots(reservedSongSlots),
+    freeEffects,
+    done,
+  });
 
-  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    const value = currentValue(target.modifier);
-    if (satisfied(target, value)) return;
+  for (let replan = 0; replan < MAX_REPLANS; replan++) {
+    const context = contextNow();
+    const started = gametimeToInt();
+    const build = buildCandidates(sources, context, PREWARM_COUNT);
 
-    if (lastValue === value && !allowStall) {
-      print(
-        `Stopping trying to gain a buff. Value of modifier ${target.modifier} is ${value}, same as the previous loop.`,
-        "red",
-      );
+    // Effects that expire before `minTurns` are in the reading but won't last,
+    // so their contribution counts against us until something replaces them.
+    const need = needFor(target) + build.shortfall;
+    if (need <= 0) return;
+
+    const result = solve({
+      candidates: build.candidates,
+      need,
+      budget: budgetFor(target, options, state),
+      slotCapacity: { [SONG_SLOT]: context.freeSongSlots },
+      perEffectPenalty: PER_EFFECT_PENALTY,
+    });
+    if (!options.silent) describePlan(result, target, need, gametimeToInt() - started);
+
+    if (result.chosen.length === 0) {
+      if (!options.silent) {
+        print(`Nothing left that moves ${target.modifier} (${result.reason}).`, "red");
+      }
       return;
     }
-    allowStall = false;
-    lastValue = value;
+    if (options.dryRun) return;
 
-    const ranked = rankSources(candidates, target, options, canAccessMall);
-
-    let appliedOne = false;
-    for (const { source, efficiency } of ranked) {
-      if (effectSkippable(source, target, state, satisfiedThisTarget)) {
+    let applied = 0;
+    for (const candidate of result.chosen) {
+      const effect = Effect.get(candidate.id);
+      const step = gainEffect(effect, sourcesFrom(build, candidate.id), context, target);
+      if (step.exhausted) {
+        done.add(effect);
         continue;
       }
-
-      const plan = source.plan(options, state, canAccessMall);
-      if (!plan) continue;
-
-      // Check the shared per-turn meat budget now, but only spend it once we commit.
-      const plannedSpend = target.meatPerTurnLimit > 0 ? source.meatPerTurn() : 0;
-      if (plannedSpend + meatPerTurnUsed > target.meatPerTurnLimit) continue;
-
-      if (target.maxEfficiency !== null && Math.abs(efficiency) > target.maxEfficiency) {
-        break;
-      }
-
-      if (!options.silent) printHtml(`${source.description}: ${efficiency} efficiency`);
-      if (plan.wish) abort(`wish for ${source.effect}`);
-
-      const result = applyGain(source, target, state, options);
-      // apply() already made any purchase, so charge it even if the source
-      // then granted nothing.
-      state.meatSpent += plan.meatCost;
-      if (result.blocked) continue;
-      if (result.allowStall) allowStall = true;
-      if (result.turns >= target.minTurns) satisfiedThisTarget.add(source.effect);
-      meatPerTurnUsed += plannedSpend;
-      appliedOne = true;
-      break;
+      applied++;
+      if (step.turns >= target.minTurns) done.add(effect);
     }
 
-    if (!appliedOne) return;
+    // Nothing landed, so another identical pass would only repeat itself. The
+    // plan was a prediction either way; the next lap re-measures and re-prices.
+    if (applied === 0) return;
   }
+}
+
+function sourcesFrom(
+  build: { sourceFor: Map<string, Source>; fallbacks: Map<string, Source[]> },
+  id: string,
+): Source[] {
+  const first = build.sourceFor.get(id);
+  const rest = build.fallbacks.get(id) ?? [];
+  return first ? [first, ...rest] : rest;
 }

@@ -138,6 +138,11 @@ export function parseCommand(input: string): ParsedCommand {
         options.silent = true;
         currentModifier = "";
         continue;
+      case "plan":
+      case "dryrun":
+        options.dryRun = true;
+        currentModifier = "";
+        continue;
     }
 
     const numeric = parseNumber(token);
@@ -178,6 +183,7 @@ export function describeGoals(targets: ResolvedTarget[], minTurns: number): stri
 
 export function printUsage(): void {
   printHtml("<strong>silent</strong>: don't output text (useful in libraries)");
+  printHtml("<strong>plan/dryrun</strong>: print the plan and its cost without buying anything");
   printHtml("<strong>limited</strong>: allow limited buffs");
   printHtml(
     "<strong>absolute/nopercentage</strong>: don't take into account percentage buffs for muscle/mysticality/moxie/hp/mp",

@@ -111,18 +111,46 @@ export function isSongEffect(effect: Effect): boolean {
   return SONG_EFFECTS.has(effect);
 }
 
-export function songSlotsFull(): boolean {
-  const limit = have($skill`Mariachi Memory`) ? 4 : 3;
-  const active = sum([...SONG_EFFECTS], (effect) => (haveEffect(effect) > 0 ? 1 : 0));
-  return active >= limit;
+/** Accordion songs that can be up at once. */
+export function songSlotLimit(): number {
+  return have($skill`Mariachi Memory`) ? 4 : 3;
+}
+
+export function activeSongCount(): number {
+  return sum([...SONG_EFFECTS], (effect) => (haveEffect(effect) > 0 ? 1 : 0));
+}
+
+/** Effect -> the group it belongs to, so the planner can look one up directly. */
+const EXCLUSION_GROUPS = indexExclusionGroups();
+
+function indexExclusionGroups(): Map<Effect, { id: string; members: Effect[] }> {
+  const index = new Map<Effect, { id: string; members: Effect[] }>();
+  for (const members of MUTUAL_EXCLUSION_SETS) {
+    const group = { id: `exclusion:${members[0]}`, members };
+    for (const effect of members) index.set(effect, group);
+  }
+  return index;
+}
+
+/**
+ * A stable id shared by every effect that competes for the same slot, or
+ * `undefined` for an effect that clashes with nothing. The planner treats a
+ * group as "pick at most one" rather than locking in whichever came first.
+ */
+export function exclusionGroupId(effect: Effect): string | undefined {
+  return EXCLUSION_GROUPS.get(effect)?.id;
+}
+
+/** The sibling already up in this effect's group, if any. */
+export function activeExclusionSibling(effect: Effect): Effect | undefined {
+  const group = EXCLUSION_GROUPS.get(effect);
+  if (!group) return undefined;
+  return group.members.find((member) => member !== effect && haveEffect(member) > 0);
 }
 
 /** True if a sibling in the effect's mutual-exclusion group is already active. */
 export function mutuallyExcluded(effect: Effect): boolean {
-  return MUTUAL_EXCLUSION_SETS.some(
-    (group) =>
-      group.includes(effect) && group.some((member) => member !== effect && haveEffect(member) > 0),
-  );
+  return activeExclusionSibling(effect) !== undefined;
 }
 
 /** Turtle tamer blessings bounce each other, so never recast over an active one. */
