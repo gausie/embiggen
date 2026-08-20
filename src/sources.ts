@@ -1,5 +1,6 @@
 import {
   advCost,
+  buy,
   availableAmount,
   canInteract,
   craftType,
@@ -22,6 +23,7 @@ import {
   myPath,
   mySoulsauce,
   numericModifier,
+  retrievePrice,
   Skill,
   soulsauceCost,
   toEffect,
@@ -29,10 +31,10 @@ import {
   use,
   useSkill,
 } from "kolmafia";
-import { $class, $effect, $item, $items, $slot, have } from "libram";
+import { $class, $effect, $item, $items, $slot, clamp, get, have, withProperty } from "libram";
 
 import { effectiveModifier } from "./modifiers";
-import { GainOptions, RunState, Target } from "./options";
+import { directionOf, GainOptions, RunState, Target } from "./options";
 import {
   anyDisdainActive,
   CHEAT_CODES,
@@ -41,12 +43,33 @@ import {
   RICHIE_SONGS,
 } from "./restrictions";
 
+/** Cap on uses of one source in a single step, inherited from the ASH version. */
+const MAX_USES = 10;
+
+/**
+ * The most we will pay for one copy of anything.
+ *
+ * mafia's own auto-buy ceiling, so the limit is whatever the user already told
+ * mafia rather than a number this script invented. `buy` with an explicit price
+ * bypasses the setting, so we have to apply it ourselves. Zero means no limit,
+ * matching how mafia reads it.
+ */
+function priceCeiling(): number {
+  const limit = get("autoBuyPriceLimit", 20000);
+  return limit > 0 ? limit : Infinity;
+}
+
 const HOLO_RECORDS = new Set(
   $items`Shrieking Weasel holo-record, Power-Guy 2000 holo-record, Lucky Strikes holo-record, EMD holo-record, Superdrifter holo-record, The Pigs holo-record, Drunk Uncles holo-record`,
 );
 
 export interface UsePlan {
+  /** Most this will cost: `unitPrice` for every copy we still have to buy. */
   meatCost: number;
+  /** Ceiling on what we'll pay per copy. */
+  unitPrice: number;
+  /** Copies we don't already own. */
+  toBuy: number;
   wish: boolean;
 }
 
@@ -61,28 +84,44 @@ export abstract class Source {
   abstract get description(): string;
   /** The item or skill this source uses; identifies it for run-level blocking. */
   abstract get key(): Item | Skill;
-  abstract plan(options: GainOptions, state: RunState, canAccessMall: boolean): UsePlan | null;
-  abstract apply(amount: number): void;
+  /**
+   * Whether this source is worth costing at all, using only what mafia already
+   * knows. Kept free of `mallPrice` so the planner can sift hundreds of
+   * candidates without a server round trip each; `plan` does the real check on
+   * the handful we actually commit to.
+   */
+  abstract feasible(options: GainOptions, canAccessMall: boolean): boolean;
+  /** The committed cost of `uses` uses, or `null` if we can't make them. */
+  abstract plan(
+    options: GainOptions,
+    state: RunState,
+    canAccessMall: boolean,
+    uses?: number,
+    meatCap?: number,
+  ): UsePlan | null;
+  /** Do it, and report the meat it actually cost. */
+  abstract apply(amount: number, plan: UsePlan): number;
 
   warmPrice(_canAccessMall: boolean): void {
     // Only items have a mall price worth pre-fetching.
   }
 
-  meatPerTurn(): number {
-    return this.baseCost / this.turnsPerUse;
+  /** Uses needed to hold the effect for `minTurns`, given `active` turns already up. */
+  usesFor(minTurns: number, active: number): number {
+    return clamp(Math.ceil((minTurns - active) / Math.max(1, this.turnsPerUse)), 1, MAX_USES);
   }
 
-  efficiency(target: Target, options: GainOptions): number {
-    const cost = this.baseCost;
-    if (cost <= 0) return 0;
+  /**
+   * What it really costs to hold this effect for the whole requirement. The old
+   * scoring priced a single use and then bought several, so a short potion
+   * looked far cheaper than it was.
+   */
+  costFor(minTurns: number, active: number): number {
+    return this.baseCost * this.usesFor(minTurns, active);
+  }
 
-    const turns = Math.min(target.reasonableTurns, this.turnsPerUse);
-    const gained = Math.min(
-      target.value - numericModifier(target.modifier),
-      effectiveModifier(this.effect, target.modifier, options),
-    );
-    const combined = gained * turns;
-    return combined === 0 ? 10000 : cost / combined;
+  meatPerAdventure(): number {
+    return this.baseCost / this.turnsPerUse;
   }
 }
 
@@ -118,37 +157,98 @@ class ItemSource extends Source {
     if (this.item.tradeable && canAccessMall) mallPrice(this.item);
   }
 
-  plan(options: GainOptions, state: RunState, canAccessMall: boolean): UsePlan | null {
+  feasible(_options: GainOptions, canAccessMall: boolean): boolean {
     const owned = availableAmount(this.item);
-    if (!this.item.tradeable && owned === 0) return null;
-    if (owned === 0 && !canAccessMall) return null;
-    // Owned items are free to use; only unowned ones need buying from the mall.
-    let meatCost = 0;
+    if (!this.item.tradeable && owned === 0) return false;
+    if (owned === 0 && !canAccessMall) return false;
+    if (owned === 0 && this.item.tradeable && historicalPrice(this.item) > priceCeiling()) {
+      return false;
+    }
+    if (!this.item.tradeable && !this.item.reusable) return false;
+    if (this.item.reusable && this.item.dailyusesleft === 0) return false;
+    return true;
+  }
+
+  plan(
+    options: GainOptions,
+    state: RunState,
+    canAccessMall: boolean,
+    uses = 1,
+    meatCap = Infinity,
+  ): UsePlan | null {
+    // Only the copies we don't already have need buying — and a reusable item
+    // serves every use from the one copy, so buying `uses` of it would be meat
+    // spent on nothing (and meat the solver scored at zero, since `baseCost`
+    // treats an owned reusable as free).
+    const owned = availableAmount(this.item);
+    const needed = this.item.reusable ? 1 : uses;
+    const toBuy = Math.max(0, needed - owned);
+    let unitPrice = 0;
     let wish = false;
-    if (owned === 0 && this.item.tradeable && canAccessMall) {
-      if (historicalPrice(this.item) >= 100000) return null;
-      meatCost = mallPrice(this.item);
+
+    let meatCost = 0;
+    if (toBuy > 0) {
+      if (!this.item.tradeable || !canAccessMall) return null;
+
+      // `retrievePrice` walks the listings, so this is what the whole batch
+      // really costs rather than the cheapest listing multiplied out. The
+      // ceiling for `buy` is then the price of the last copy in the batch.
+      meatCost = retrievePrice(this.item, owned + toBuy) - retrievePrice(this.item, owned);
+      unitPrice =
+        toBuy > 1
+          ? meatCost -
+            (retrievePrice(this.item, owned + toBuy - 1) - retrievePrice(this.item, owned))
+          : meatCost;
+
       const wishPrice = mallPrice($item`pocket wish`);
-      if (meatCost >= 50000 && meatCost >= wishPrice) {
+      if (unitPrice >= 50000 && unitPrice >= wishPrice) {
         wish = true;
-        meatCost = wishPrice;
+        unitPrice = wishPrice;
+        meatCost = wishPrice * toBuy;
       }
-      if (state.meatSpent + meatCost > options.maxMeatToSpend) return null;
+      if (unitPrice > priceCeiling()) return null;
+      // The goal's own slice as well as the run-wide limit, so a per-goal rail
+      // still bites in a mode whose solver budget is denominated in something else.
+      if (state.meatSpent + meatCost > Math.min(meatCap, options.maxMeatToSpend)) return null;
     }
 
     if (!this.item.tradeable && !this.item.reusable) return null;
     if (this.item.reusable && this.item.dailyusesleft === 0) return null;
 
-    return { meatCost, wish };
+    return { meatCost, unitPrice, toBuy, wish };
   }
 
-  apply(amount: number): void {
-    // Using more than one d12 at a time skips the effect, so pace them out.
-    if (this.item === $item`d12`) {
-      for (let i = 0; i < amount; i++) use(1, this.item);
-    } else {
-      use(amount, this.item);
+  /**
+   * Buy what we're short of, then use what we have.
+   *
+   * `mallPrice` is the cheapest listing, but listings ladder upwards, so asking
+   * for several copies can cost more per copy than that suggests. Capping `buy`
+   * at the price we planned for means a steep ladder gets us fewer copies rather
+   * than a bigger bill — the next plan sees the shortfall and decides again.
+   */
+  apply(amount: number, plan: UsePlan): number {
+    let spent = 0;
+    if (plan.toBuy > 0 && plan.unitPrice > 0) {
+      const bought = buy(plan.toBuy, this.item, plan.unitPrice);
+      // Getting the whole batch costs what `plan` priced it at. Falling short
+      // means the ladder moved, and the last-copy ceiling is the best bound left.
+      spent = bought === plan.toBuy ? plan.meatCost : bought * plan.unitPrice;
     }
+
+    const usable = Math.min(amount, availableAmount(this.item));
+    if (usable <= 0) return spent;
+
+    // With the mall shut off, `use` cannot quietly top up what `buy` declined to
+    // overpay for; it can only spend what we already hold.
+    withProperty("autoSatisfyWithMall", false, () => {
+      // Using more than one d12 at a time skips the effect, so pace them out.
+      if (this.item === $item`d12`) {
+        for (let i = 0; i < usable; i++) use(1, this.item);
+      } else {
+        use(usable, this.item);
+      }
+    });
+    return spent;
   }
 }
 
@@ -172,27 +272,30 @@ class SkillSource extends Source {
     return mpCost(this.skill) * 2;
   }
 
-  plan(_options: GainOptions, _state: RunState, _canAccessMall: boolean): UsePlan | null {
-    if (!have(this.skill) || !isUnrestricted(this.skill)) return null;
-    if (advCost(this.skill) > 0) return null;
-    if (mpCost(this.skill) > myMaxmp()) return null;
-    if (hpCost(this.skill) >= myHp()) return null;
-    if (soulsauceCost(this.skill) > mySoulsauce()) return null;
+  // A skill costs no meat, so there is nothing extra for `plan` to check.
+  feasible(_options: GainOptions, _canAccessMall: boolean): boolean {
+    if (!have(this.skill) || !isUnrestricted(this.skill)) return false;
+    if (advCost(this.skill) > 0) return false;
+    if (mpCost(this.skill) > myMaxmp()) return false;
+    if (hpCost(this.skill) >= myHp()) return false;
+    if (soulsauceCost(this.skill) > mySoulsauce()) return false;
 
     if (RICHIE_SONGS.has(this.skill) && (myClass() !== $class`Accordion Thief` || myLevel() < 15)) {
-      return null;
+      return false;
     }
 
     // Don't recast a blessing while a rival blessing is active — they bounce.
     if (isBlessing(this.skill) && myClass() !== $class`Turtle Tamer` && anyDisdainActive()) {
-      return null;
+      return false;
     }
 
-    if (CHEAT_CODES.has(this.skill) && availableAmount($item`Powerful Glove`) === 0) {
-      return null;
-    }
+    return !(CHEAT_CODES.has(this.skill) && availableAmount($item`Powerful Glove`) === 0);
+  }
 
-    return { meatCost: 0, wish: false };
+  plan(options: GainOptions, _state: RunState, canAccessMall: boolean): UsePlan | null {
+    return this.feasible(options, canAccessMall)
+      ? { meatCost: 0, unitPrice: 0, toBuy: 0, wish: false }
+      : null;
   }
 
   /** How many casts our HP and soulsauce pools allow right now (capped at 10). */
@@ -206,7 +309,7 @@ class SkillSource extends Source {
     );
   }
 
-  apply(amount: number): void {
+  apply(amount: number): number {
     const needGlove = CHEAT_CODES.has(this.skill) && !haveEquipped($item`Powerful Glove`);
     const saved = needGlove ? equippedItem($slot`acc1`) : null;
     if (needGlove) equip($slot`acc1`, $item`Powerful Glove`);
@@ -214,6 +317,7 @@ class SkillSource extends Source {
     useSkill(Math.min(this.affordableCasts, amount), this.skill);
 
     if (saved && saved !== $item`none`) equip($slot`acc1`, saved);
+    return 0;
   }
 }
 
@@ -262,7 +366,6 @@ export function sourcesFor(
   options: GainOptions,
   restrictions: Restrictions,
 ): Source[] {
-  const wantPositive = target.value >= 0;
   const path = myPath().name;
   const context: CandidateContext = {
     inGLover: path === "G-Lover",
@@ -272,13 +375,8 @@ export function sourcesFor(
     blockedSkills: restrictions.blockedSkills,
   };
 
-  const effects = Effect.all().filter((effect) => {
-    const value = effectiveModifier(effect, target.modifier, options);
-    return wantPositive ? value > 0 : value < 0;
-  });
-
   const sources: Source[] = [];
-  for (const effect of effects) {
+  for (const effect of effectsFor(target, options)) {
     for (const item of itemsGranting(effect)) {
       if (isCandidateItem(item, effect, context)) {
         sources.push(new ItemSource(effect, item));
@@ -291,6 +389,37 @@ export function sourcesFor(
     }
   }
   return sources;
+}
+
+const effectIndex = new Map<string, Effect[]>();
+
+/** Drop the memo below. Exists so tests can vary the game data between cases. */
+export function forgetEffectIndex(): void {
+  effectIndex.clear();
+}
+
+/**
+ * Every effect that pushes `modifier` the wanted way, memoised for the session.
+ *
+ * Scanning `Effect.all()` costs a native call per effect, and we re-plan several
+ * times per target — `all res` alone asks five times. Which *way* an effect
+ * moves a modifier doesn't change as we buff, even where percentages are folded
+ * onto a live base stat, so only the membership is cached; `plan.ts` reads the
+ * amounts fresh each time.
+ */
+export function effectsFor(target: Target, options: GainOptions): Effect[] {
+  const wantPositive = directionOf(target) > 0;
+  const modifier = target.modifier;
+  const key = `${modifier}|${wantPositive}|${options.ignorePercentages}`;
+  let cached = effectIndex.get(key);
+  if (!cached) {
+    cached = Effect.all().filter((effect) => {
+      const value = effectiveModifier(effect, modifier, options);
+      return wantPositive ? value > 0 : value < 0;
+    });
+    effectIndex.set(key, cached);
+  }
+  return cached;
 }
 
 let itemIndex: Map<Effect, Item[]> | null = null;

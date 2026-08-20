@@ -1,14 +1,15 @@
+import { Effect, haveEffect, Item, myClass, Skill, Thrall, todayToString } from "kolmafia";
 import {
-  Effect,
-  haveEffect,
-  Item,
-  myClass,
-  Skill,
-  Thrall,
-  toEffect,
-  todayToString,
-} from "kolmafia";
-import { $class, $effects, $item, $items, $skill, $skills, get, have, sum } from "libram";
+  $class,
+  $effects,
+  $item,
+  $items,
+  $skill,
+  $skills,
+  get,
+  getSongCount,
+  getSongLimit,
+} from "libram";
 
 import { GainOptions } from "./options";
 
@@ -26,13 +27,6 @@ const DISDAINS = $effects`Disdain of the War Snapper, Disdain of She-Who-Was, Di
 export const RICHIE_SONGS = new Set(
   $skills`The Ballad of Richie Thingfinder, Benetton's Medley of Diversity, Elron's Explosive Etude, Chorale of Companionship, Prelude of Precision`,
 );
-
-const ACCORDION_SONGS = [
-  ...$skills`The Moxious Madrigal, The Magical Mojomuscular Melody, Cletus's Canticle of Celerity, The Power Ballad of the Arrowsmith, The Polka of Plenty, Jackasses' Symphony of Destruction, Fat Leon's Phat Loot Lyric, Brawnee's Anthem of Absorption, The Psalm of Pointiness, Stevedave's Shanty of Superiority, Aloysius' Antiphon of Aptitude, The Ode to Booze, The Sonata of Sneakiness, Carlweather's Cantata of Confrontation, Ur-Kel's Aria of Annoyance, Dirge of Dreadfulness, Donho's Bubbly Ballad, Cringle's Curative Carol, Inigo's Incantation of Inspiration`,
-  ...RICHIE_SONGS,
-];
-
-const SONG_EFFECTS = new Set(ACCORDION_SONGS.map((skill) => toEffect(skill)));
 
 const MUTUAL_EXCLUSION_SETS = [
   $effects`Snarl of the Timberwolf, Scowl of the Auk, Stiff Upper Lip, Patient Smile, Quiet Determination, Arched Eyebrow of the Archmage, Wizard Squint, Quiet Judgement, Icy Glare, Wry Smile, Disco Leer, Disco Smirk, Suspicious Gaze, Knowing Smile, Quiet Desperation`,
@@ -107,22 +101,49 @@ export function buildRestrictions(options: GainOptions): Restrictions {
   return { blockedSkills, blockedItems };
 }
 
-export function isSongEffect(effect: Effect): boolean {
-  return SONG_EFFECTS.has(effect);
+/**
+ * Song slots free right now, less any another target has claimed.
+ *
+ * libram reads all of this from game data: which effects are songs, and a limit
+ * that accounts for Four Songs and Additional Song rather than just Mariachi
+ * Memory. The list of songs we used to keep here went stale every time KoL
+ * added one.
+ */
+export function freeSongSlots(reserved = 0): number {
+  return Math.max(0, getSongLimit() - getSongCount() - reserved);
 }
 
-export function songSlotsFull(): boolean {
-  const limit = have($skill`Mariachi Memory`) ? 4 : 3;
-  const active = sum([...SONG_EFFECTS], (effect) => (haveEffect(effect) > 0 ? 1 : 0));
-  return active >= limit;
+/** Effect -> the group it belongs to, so the planner can look one up directly. */
+const EXCLUSION_GROUPS = indexExclusionGroups();
+
+function indexExclusionGroups(): Map<Effect, { id: string; members: Effect[] }> {
+  const index = new Map<Effect, { id: string; members: Effect[] }>();
+  for (const members of MUTUAL_EXCLUSION_SETS) {
+    const group = { id: `exclusion:${members[0]}`, members };
+    for (const effect of members) index.set(effect, group);
+  }
+  return index;
 }
 
-/** True if a sibling in the effect's mutual-exclusion group is already active. */
-export function mutuallyExcluded(effect: Effect): boolean {
-  return MUTUAL_EXCLUSION_SETS.some(
-    (group) =>
-      group.includes(effect) && group.some((member) => member !== effect && haveEffect(member) > 0),
-  );
+/**
+ * A stable id shared by every effect that competes for the same slot, or
+ * `undefined` for an effect that clashes with nothing. The planner treats a
+ * group as "pick at most one" rather than locking in whichever came first.
+ */
+export function exclusionGroupId(effect: Effect): string | undefined {
+  return EXCLUSION_GROUPS.get(effect)?.id;
+}
+
+/**
+ * The sibling already up in this effect's group, if any.
+ *
+ * Gaining the effect would overwrite that sibling, so the planner prices the
+ * swap at the difference rather than writing the whole group off.
+ */
+export function activeExclusionSibling(effect: Effect): Effect | undefined {
+  const group = EXCLUSION_GROUPS.get(effect);
+  if (!group) return undefined;
+  return group.members.find((member) => member !== effect && haveEffect(member) > 0);
 }
 
 /** Turtle tamer blessings bounce each other, so never recast over an active one. */

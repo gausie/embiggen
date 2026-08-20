@@ -47,6 +47,8 @@ for (const [key, value] of Object.entries(kolmafia)) {
   ) {
     this.name = name;
     this.id = knownIds[key]++;
+    // Mafia populates this from game data; libram reads it to spot songs.
+    this.attributes = "";
   });
   mockedClass.prototype.toString = function (this: { name: string }) {
     return this.name;
@@ -56,6 +58,21 @@ for (const [key, value] of Object.entries(kolmafia)) {
   );
   vi.mocked(mockedClass.all).mockImplementation(() => knownInstances[key]);
 }
+
+// Buff skills grant an effect of the same name, and vice versa — true of every
+// accordion song, which is what libram's `isSong` walks to when an effect's
+// attributes don't already say so.
+const sameName =
+  <T>(lookup: (name: string) => T) =>
+  (thing: { name: string } | string | number) =>
+    lookup(typeof thing === "object" ? thing.name : String(thing));
+
+vi.mocked(kolmafia).toEffect.mockImplementation(
+  sameName((name) => kolmafia.Effect.get(name)) as unknown as typeof kolmafia.toEffect,
+);
+vi.mocked(kolmafia).toSkill.mockImplementation(
+  sameName((name) => kolmafia.Skill.get(name)) as unknown as typeof kolmafia.toSkill,
+);
 
 vi.mocked(kolmafia).myPrimestat.mockImplementation(() => kolmafia.Stat.get("Muscle"));
 vi.mocked(kolmafia).print.mockImplementation(() => undefined);

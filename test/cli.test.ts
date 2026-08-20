@@ -2,6 +2,7 @@ import { $modifier, $modifiers } from "libram";
 import { describe, expect, it } from "vitest";
 
 import { parseCommand } from "../src/cli";
+import { NO_MEAT_LIMIT } from "../src/options";
 
 describe("parseCommand", () => {
   it("parses a single modifier target", () => {
@@ -44,31 +45,72 @@ describe("parseCommand", () => {
     expect(targets).toEqual([{ modifier: $modifier`Muscle`, value: 300 }]);
   });
 
-  it("a bare modifier means max effort on a tight budget", () => {
+  it("spends nothing by default until asked to", () => {
+    expect(parseCommand("400 init").options.maxMeatToSpend).toBe(NO_MEAT_LIMIT);
+  });
+
+  it("a bare modifier asks for as much as possible", () => {
+    // `null` is unbounded demand. The rail that stops it is applied per goal in
+    // main.ts, so parsing one bare modifier can't clamp the whole run's budget.
     const { targets, options } = parseCommand("ml");
-    expect(targets).toEqual([{ modifier: $modifier`Monster Level`, value: 1000000 }]);
-    expect(options.maxMeatToSpend).toBe(10000);
+    expect(targets).toEqual([{ modifier: $modifier`Monster Level`, value: null }]);
+    expect(options.maxMeatToSpend).toBe(NO_MEAT_LIMIT);
   });
 
-  it("maxmeatspent sets the cap and can raise it above the default", () => {
-    expect(parseCommand("10000 ml 10000 maxmeatspent").options.maxMeatToSpend).toBe(10000);
-    // Regression: previously Math.min against the 100k default silently ignored this.
-    expect(parseCommand("500000 ml 500000 maxmeatspent").options.maxMeatToSpend).toBe(500000);
+  it("does not let a bare modifier tighten the budget for other goals", () => {
+    const { targets, options } = parseCommand("ml 400 init");
+    expect(targets.map(({ value }) => value)).toEqual([null, 400]);
+    expect(options.maxMeatToSpend).toBe(NO_MEAT_LIMIT);
   });
 
-  it("captures efficiency and spend-per-turn limits", () => {
+  it("totalmeat sets the cap", () => {
+    expect(parseCommand("10000 ml 10000 totalmeat").options.maxMeatToSpend).toBe(10000);
+    // Regression: previously Math.min against a 100k default silently ignored this.
+    expect(parseCommand("500000 ml 500000 totalmeat").options.maxMeatToSpend).toBe(500000);
+  });
+
+  it("captures efficiency and meat-per-adventure limits", () => {
     const eff = parseCommand("weapon damage 0.5 efficiency");
     expect(eff.maxEfficiency).toBe(0.5);
-    expect(eff.targets).toEqual([{ modifier: $modifier`Weapon Damage`, value: 1000000 }]);
+    expect(eff.targets).toEqual([{ modifier: $modifier`Weapon Damage`, value: null }]);
 
-    const spt = parseCommand("hp 100 spendperturn");
-    expect(spt.meatSpendPerTurnLimit).toBe(100);
-    expect(spt.targets).toEqual([{ modifier: $modifier`Maximum HP`, value: 1000000 }]);
+    for (const command of ["hp 100 meatperadventure", "hp 100 mpa"]) {
+      const parsed = parseCommand(command);
+      expect(parsed.meatPerAdventureLimit).toBe(100);
+      expect(parsed.targets).toEqual([{ modifier: $modifier`Maximum HP`, value: null }]);
+    }
+  });
+
+  it("still reads meat as the meat drop modifier", () => {
+    // `meat` stays an alias for the modifier rather than becoming a budget
+    // keyword, so `300 meat` keeps meaning what it always has.
+    expect(parseCommand("300 meat").targets).toEqual([
+      { modifier: $modifier`Meat Drop`, value: 300 },
+    ]);
   });
 
   it("reads standalone flags", () => {
     const { options } = parseCommand("silent absolute 400 init");
     expect(options.silent).toBe(true);
     expect(options.ignorePercentages).toBe(true);
+  });
+
+  it("keeps the goal when a standalone flag follows it", () => {
+    // Regression: a flag that takes no number used to clear the half-read
+    // modifier, so `embiggen item plan` parsed as no goal at all.
+    const plan = parseCommand("item plan");
+    expect(plan.targets).toEqual([{ modifier: $modifier`Item Drop`, value: null }]);
+    expect(plan.options.dryRun).toBe(true);
+
+    const trailing = parseCommand("400 init silent");
+    expect(trailing.targets).toEqual([{ modifier: $modifier`Initiative`, value: 400 }]);
+    expect(trailing.options.silent).toBe(true);
+
+    const between = parseCommand("item limited 400 init");
+    expect(between.targets).toEqual([
+      { modifier: $modifier`Item Drop`, value: null },
+      { modifier: $modifier`Initiative`, value: 400 },
+    ]);
+    expect(between.options.allowLimitedBuffs).toBe(true);
   });
 });
