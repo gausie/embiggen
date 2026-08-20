@@ -203,7 +203,7 @@ function _toPrimitive(t, r) {
     if ("object" != typeof i) return i;
     throw new TypeError("@@toPrimitive must return a primitive value.");
   }
-  return (String )(t);
+  return ("string" === r ? String : Number)(t);
 }
 function _toPropertyKey(t) {
   var i = _toPrimitive(t, "string");
@@ -424,6 +424,52 @@ function _set(property, value) {
   var stringValue = value === null ? "" : value.toString();
   kolmafia.setProperty(property, stringValue);
   return value;
+}
+/**
+ * Sets the value of a set of mafia properties
+ *
+ * @param properties Set of properties
+ */
+function setProperties(properties) {
+  for (var _i = 0, _Object$entries = Object.entries(properties); _i < _Object$entries.length; _i++) {
+    var _Object$entries$_i = _slicedToArray(_Object$entries[_i], 2),
+      prop = _Object$entries$_i[0],
+      value = _Object$entries$_i[1];
+    _set(prop, value);
+  }
+}
+/**
+ * Carries out a callback during which a set of properties will be set as supplied
+ *
+ * @param properties Properties to set during callback
+ * @param callback Callback to execute with set properties
+ * @returns Return value of the supplied callback
+ */
+function withProperties(properties, callback) {
+  var propertiesBackup = Object.fromEntries(Object.entries(properties).map(_ref => {
+    var _ref2 = _slicedToArray(_ref, 1),
+      prop = _ref2[0];
+    return [prop, get(prop)];
+  }));
+  setProperties(properties);
+  try {
+    return callback();
+  } finally {
+    setProperties(propertiesBackup);
+  }
+}
+/**
+ * Carries out a callback during which a property will be set as supplied
+ *
+ * @param property Property to set during callback
+ * @param value Value to set property during callback
+ * @param callback Callback to execute with set properties
+ * @returns Return value of the supplied callback
+ */
+function withProperty(property, value, callback) {
+  return withProperties({
+    [property]: value
+  }, callback);
 }
 var PropertiesManager = /*#__PURE__*/function () {
   function PropertiesManager() {
@@ -664,16 +710,6 @@ _defineProperty(PropertiesManager, "EMPTY_PREFERENCE", Symbol("empty preference"
  */
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
-}
-/**
- * Sum an array of numbers.
- *
- * @param addends Addends to sum.
- * @param x Property or mapping function of addends to sum
- * @returns Sum of numbers
- */
-function sum(addends, x) {
-  return addends.reduce((subtotal, element) => subtotal + (typeof x === "function" ? x(element) : element[x]), 0);
 }
 /**
  * Splits a string by commas while also respecting escaping commas with a backslash
@@ -988,7 +1024,58 @@ createSingleConstant(kolmafia.Thrall, kolmafia.toThrall);
  */
 createPluralConstant(kolmafia.Thrall);
 
-var _templateObject10$3, _templateObject11$3, _templateObject12$2, _templateObject13$2, _templateObject14$1, _templateObject15$1, _templateObject16$1, _templateObject17$1, _templateObject18$1, _templateObject19$1, _templateObject20$1, _templateObject21$1, _templateObject22$1, _templateObject23$1, _templateObject24, _templateObject25, _templateObject26, _templateObject27, _templateObject28, _templateObject29, _templateObject30, _templateObject31, _templateObject32, _templateObject33, _templateObject34, _templateObject35, _templateObject48, _templateObject49, _templateObject50, _templateObject51, _templateObject52, _templateObject53;
+var _templateObject$5, _templateObject10$3, _templateObject11$3, _templateObject12$2, _templateObject13$2, _templateObject14$1, _templateObject15$1, _templateObject16$1, _templateObject17$1, _templateObject18$1, _templateObject19$1, _templateObject20$1, _templateObject21$1, _templateObject22, _templateObject23, _templateObject24, _templateObject25, _templateObject26, _templateObject27, _templateObject28, _templateObject29, _templateObject30, _templateObject31, _templateObject32, _templateObject33, _templateObject34, _templateObject35, _templateObject47, _templateObject48, _templateObject49, _templateObject50, _templateObject51, _templateObject52, _templateObject53;
+/**
+ * Determines the current maximum Accordion Thief songs the player can have in their head
+ *
+ * @category General
+ * @returns Maximum number of songs for player
+ */
+function getSongLimit() {
+  return 3 + (kolmafia.booleanModifier("Four Songs") ? 1 : 0) + kolmafia.numericModifier("Additional Song");
+}
+/**
+ * Determine whether the Skill or Effect provided is an Accordion Thief song
+ *
+ * @category General
+ * @param skillOrEffect The Skill or Effect
+ * @returns Whether it's a song
+ */
+function isSong(skillOrEffect) {
+  if (skillOrEffect instanceof kolmafia.Effect && skillOrEffect.attributes.includes("song")) {
+    return true;
+  } else {
+    var skill = skillOrEffect instanceof kolmafia.Effect ? kolmafia.toSkill(skillOrEffect) : skillOrEffect;
+    return skill.class === $class(_templateObject$5 || (_templateObject$5 = _taggedTemplateLiteral(["Accordion Thief"]))) && skill.buff;
+  }
+}
+/**
+ * List all active Effects
+ *
+ * @category General
+ * @returns List of Effects
+ */
+function getActiveEffects() {
+  return Object.keys(kolmafia.myEffects()).map(e => kolmafia.Effect.get(e));
+}
+/**
+ * List currently active Accordion Thief songs
+ *
+ * @category General
+ * @returns List of song Effects
+ */
+function getActiveSongs() {
+  return getActiveEffects().filter(isSong);
+}
+/**
+ * List number of active Accordion Thief songs
+ *
+ * @category General
+ * @returns Number of songs
+ */
+function getSongCount() {
+  return getActiveSongs().length;
+}
 /**
  * Determine whether the player "has" any entity which one could feasibly "have".
  *
@@ -1036,28 +1123,95 @@ var Wanderer;
 new Map([["El Dia De Los Muertos Borrachos", $monsters(_templateObject10$3 || (_templateObject10$3 = _taggedTemplateLiteral(["Novia Cad\xE1ver, Novio Cad\xE1ver, Padre Cad\xE1ver, Persona Inocente Cad\xE1ver"])))], ["Feast of Boris", $monsters(_templateObject11$3 || (_templateObject11$3 = _taggedTemplateLiteral(["Candied Yam Golem, Malevolent Tofurkey, Possessed Can of Cranberry Sauce, Stuffing Golem"])))], ["Talk Like a Pirate Day", $monsters(_templateObject12$2 || (_templateObject12$2 = _taggedTemplateLiteral(["ambulatory pirate, migratory pirate, peripatetic pirate"])))]]);
 new Map([["standing around flexing their muscles and using grip exercisers", $stat(_templateObject13$2 || (_templateObject13$2 = _taggedTemplateLiteral(["Muscle"])))], ["sitting around playing chess and solving complicated-looking logic puzzles", $stat(_templateObject14$1 || (_templateObject14$1 = _taggedTemplateLiteral(["Mysticality"])))], ["all wearing sunglasses and dancing", $stat(_templateObject15$1 || (_templateObject15$1 = _taggedTemplateLiteral(["Moxie"])))]]);
 new Map([["people, all of whom appear to be on fire", $element(_templateObject16$1 || (_templateObject16$1 = _taggedTemplateLiteral(["hot"])))], ["people, surrounded by a cloud of eldritch mist", $element(_templateObject17$1 || (_templateObject17$1 = _taggedTemplateLiteral(["spooky"])))], ["greasy-looking people furtively skulking around", $element(_templateObject18$1 || (_templateObject18$1 = _taggedTemplateLiteral(["sleaze"])))], ["people, surrounded by garbage and clouds of flies", $element(_templateObject19$1 || (_templateObject19$1 = _taggedTemplateLiteral(["stench"])))], ["people, clustered around a group of igloos", $element(_templateObject20$1 || (_templateObject20$1 = _taggedTemplateLiteral(["cold"])))]]);
-new Map([["smoldering bushes on the outskirts of a hedge maze", $element(_templateObject21$1 || (_templateObject21$1 = _taggedTemplateLiteral(["hot"])))], ["creepy-looking black bushes on the outskirts of a hedge maze", $element(_templateObject22$1 || (_templateObject22$1 = _taggedTemplateLiteral(["spooky"])))], ["purplish, greasy-looking hedges", $element(_templateObject23$1 || (_templateObject23$1 = _taggedTemplateLiteral(["sleaze"])))], ["nasty-looking, dripping green bushes on the outskirts of a hedge maze", $element(_templateObject24 || (_templateObject24 = _taggedTemplateLiteral(["stench"])))], ["frost-rimed bushes on the outskirts of a hedge maze", $element(_templateObject25 || (_templateObject25 = _taggedTemplateLiteral(["cold"])))]]);
+new Map([["smoldering bushes on the outskirts of a hedge maze", $element(_templateObject21$1 || (_templateObject21$1 = _taggedTemplateLiteral(["hot"])))], ["creepy-looking black bushes on the outskirts of a hedge maze", $element(_templateObject22 || (_templateObject22 = _taggedTemplateLiteral(["spooky"])))], ["purplish, greasy-looking hedges", $element(_templateObject23 || (_templateObject23 = _taggedTemplateLiteral(["sleaze"])))], ["nasty-looking, dripping green bushes on the outskirts of a hedge maze", $element(_templateObject24 || (_templateObject24 = _taggedTemplateLiteral(["stench"])))], ["frost-rimed bushes on the outskirts of a hedge maze", $element(_templateObject25 || (_templateObject25 = _taggedTemplateLiteral(["cold"])))]]);
 new Map([["smoke rising from deeper within the maze", $element(_templateObject26 || (_templateObject26 = _taggedTemplateLiteral(["hot"])))], ["a miasma of eldritch vapors rising from deeper within the maze", $element(_templateObject27 || (_templateObject27 = _taggedTemplateLiteral(["spooky"])))], ["a greasy purple cloud hanging over the center of the maze", $element(_templateObject28 || (_templateObject28 = _taggedTemplateLiteral(["sleaze"])))], ["a cloud of green gas hovering over the maze", $element(_templateObject29 || (_templateObject29 = _taggedTemplateLiteral(["stench"])))], ["wintry mists rising from deeper within the maze", $element(_templateObject30 || (_templateObject30 = _taggedTemplateLiteral(["cold"])))]]);
 new Map([["with lava slowly oozing out of it", $element(_templateObject31 || (_templateObject31 = _taggedTemplateLiteral(["hot"])))], ["surrounded by creepy black mist", $element(_templateObject32 || (_templateObject32 = _taggedTemplateLiteral(["spooky"])))], ["that occasionally vomits out a greasy ball of hair", $element(_templateObject33 || (_templateObject33 = _taggedTemplateLiteral(["sleaze"])))], ["disgorging a really surprising amount of sewage", $element(_templateObject34 || (_templateObject34 = _taggedTemplateLiteral(["stench"])))], ["occasionally disgorging a bunch of ice cubes", $element(_templateObject35 || (_templateObject35 = _taggedTemplateLiteral(["cold"])))]]);
+/**
+ * Calculate the total weight of a given familiar, including soup & modifiers
+ * @param familiar The familiar to use--defaults to your current one
+ * @param considerAdjustment Whether to include your `weightAdjustment` in the calculation
+ * @returns The total weight of the given familiar
+ */
+function totalFamiliarWeight() {
+  var familiar = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : kolmafia.myFamiliar();
+  var considerAdjustment = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+  return clamp(clamp(kolmafia.familiarWeight(familiar), have($effect(_templateObject47 || (_templateObject47 = _taggedTemplateLiteral(["Fidoxene"])))) ? 20 : 0, Infinity) + familiar.soupWeight + (considerAdjustment ? kolmafia.weightAdjustment() : 0) + (familiar.feasted ? 10 : 0), 1, Infinity);
+}
 var regularFamiliarTags = Object.freeze(["animal", "insect", "haseyes", "haswings", "fast", "bite", "flies", "hashands", "wearsclothes", "organic", "vegetable", "hovers", "edible", "food", "sentient", "cute", "mineral", "polygonal", "object", "undead", "cantalk", "evil", "orb", "spooky", "sleaze", "aquatic", "swims", "isclothes", "phallic", "stench", "hot", "hasbeak", "haslegs", "robot", "technological", "hard", "cold", "hasbones", "hasclaws", "reallyevil", "good", "person", "humanoid", "animatedart", "software", "hasshell", "hasstinger"]);
 new Set(regularFamiliarTags);
 new Map([[$familiar(_templateObject48 || (_templateObject48 = _taggedTemplateLiteral(["Nursine"]))), ["ult_bearhug"]], [$familiar(_templateObject49 || (_templateObject49 = _taggedTemplateLiteral(["Caramel"]))), ["ult_sticktreats"]], [$familiar(_templateObject50 || (_templateObject50 = _taggedTemplateLiteral(["Smashmoth"]))), ["ult_owlstare"]], [$familiar(_templateObject51 || (_templateObject51 = _taggedTemplateLiteral(["Slotter"]))), ["ult_bloodbath"]], [$familiar(_templateObject52 || (_templateObject52 = _taggedTemplateLiteral(["Cornbeefadon"]))), ["ult_pepperscorn"]], [$familiar(_templateObject53 || (_templateObject53 = _taggedTemplateLiteral(["Mu"]))), ["ult_rainbowstorm"]]]);
 
-/** Default meat budget; also the sentinel for "the user didn't override it". */
-var DEFAULT_MAX_MEAT = 100000;
+/**
+ * No spending limit unless one is asked for. Doubles as the sentinel for "the
+ * user didn't set a budget"; an open-ended goal still gets a rail of its own,
+ * since "as high as possible" with no ceiling would buy the entire mall.
+ */
+var NO_MEAT_LIMIT = Infinity;
+
+/** The rail on a bare modifier, which has no target value to stop it. */
+var OPEN_ENDED_MEAT_LIMIT = 10000;
+
+/**
+ * Efficiency cap applied to a goal with no target value, unless the command
+ * gives one. `null` leaves such goals uncapped.
+ *
+ * A goal with a number stops when it reaches that number, so it needs no cap and
+ * must not have one — a filter there could reject the very effect that closes
+ * the gap and turn a run that used to succeed into one that reports itself
+ * short. Open-ended goals have no such stopping condition, so value for money is
+ * what keeps them sensible.
+ */
+var OPEN_ENDED_EFFICIENCY = null;
 function defaultOptions() {
   return {
     silent: false,
     ignorePercentages: false,
     allowLimitedBuffs: false,
-    maxMeatToSpend: DEFAULT_MAX_MEAT
+    maxMeatToSpend: NO_MEAT_LIMIT,
+    dryRun: false
   };
+}
+/**
+ * Which way a target wants its modifier pushed: `1` up, `-1` down. An
+ * open-ended goal always means "up"; `-combat` is the only way to ask for less,
+ * and it carries an explicit negative value.
+ */
+function directionOf(target) {
+  return target.value === null || target.value >= 0 ? 1 : -1;
 }
 function newRunState() {
   return {
     meatSpent: 0,
+    meatPerAdventureSpent: 0,
     blockedSources: new Set()
   };
+}
+
+/**
+ * Group a number with commas for display: `1234567.5` -> `"1,234,567.5"`.
+ *
+ * Hand-rolled rather than `toLocaleString`, which mafia's Rhino doesn't
+ * implement dependably, and built from string slicing rather than a lookbehind
+ * regex for the same reason. Rounds to two decimal places; trailing zeroes are
+ * dropped, so whole numbers stay whole.
+ */
+function formatNumber(value) {
+  if (!isFinite(value)) return String(value);
+  var rounded = Math.round(value * 100) / 100;
+  var magnitude = Math.abs(rounded);
+  var whole = Math.floor(magnitude);
+  var remaining = String(whole);
+  var grouped = "";
+  while (remaining.length > 3) {
+    grouped = ",".concat(remaining.slice(-3)).concat(grouped);
+    remaining = remaining.slice(0, -3);
+  }
+  grouped = remaining + grouped;
+
+  // `String(0.25).slice(1)` is ".25" — the decimals with their point attached.
+  var fraction = Math.round((magnitude - whole) * 100) / 100;
+  var decimals = fraction > 0 ? String(fraction).slice(1) : "";
+  return "".concat(rounded < 0 ? "-" : "").concat(grouped).concat(decimals);
 }
 
 /** Parse a CLI token as a number, tolerating thousands separators. */
@@ -1104,7 +1258,7 @@ function resolveModifiers(phrase) {
   var modifier = kolmafia.Modifier.get(expandAbbreviation(phrase));
   return modifier === kolmafia.Modifier.none ? [] : [modifier];
 }
-function addTargets(targets, unrecognised, phrase, value, options) {
+function addTargets(targets, unrecognised, phrase, value) {
   if (phrase === "-combat") {
     if (value > 0) value = -value;else if (value === 0) value = -25;
     phrase = "combat";
@@ -1118,11 +1272,12 @@ function addTargets(targets, unrecognised, phrase, value, options) {
     return;
   }
 
-  // A bare modifier with no number means "as much as possible" on a tight budget.
-  if (value === 0) {
-    value = 1000000;
-    options.maxMeatToSpend = 10000;
-  }
+  // A bare modifier with no number means "as much as possible". `null` says
+  // exactly that, so the solver maximises against the budget instead of chasing
+  // an arbitrarily large stand-in number. Such a goal has no stopping condition
+  // of its own, so `main.ts` gives it a spending rail — done there, per goal,
+  // rather than here, where it would clamp the budget for every other goal too.
+  var goal = value === 0 ? null : value;
   var _iterator = _createForOfIteratorHelper(modifiers),
     _step;
   try {
@@ -1130,7 +1285,7 @@ function addTargets(targets, unrecognised, phrase, value, options) {
       var modifier = _step.value;
       targets.push({
         modifier,
-        value
+        value: goal
       });
     }
   } catch (err) {
@@ -1145,7 +1300,7 @@ function parseCommand(input) {
   var unrecognised = [];
   var minTurns = 1;
   var maxEfficiency = null;
-  var meatSpendPerTurnLimit = 0;
+  var meatPerAdventureLimit = 0;
   var pendingValue = 0;
   var currentModifier = "";
   var _iterator2 = _createForOfIteratorHelper(input.split(" ")),
@@ -1167,35 +1322,39 @@ function parseCommand(input) {
           pendingValue = 0;
           currentModifier = "";
           continue;
-        case "spendperturn":
-        case "spt":
-          meatSpendPerTurnLimit = pendingValue;
+        case "meatperadventure":
+        case "mpa":
+          meatPerAdventureLimit = pendingValue;
           pendingValue = 0;
           currentModifier = "";
           continue;
-        case "maxmeatspent":
+        case "totalmeat":
           options.maxMeatToSpend = pendingValue;
           pendingValue = 0;
           currentModifier = "";
           continue;
+        // A flag that takes no number sits anywhere in the command, so it must
+        // leave a half-read modifier alone — clearing it would silently throw the
+        // goal away, as `embiggen item plan` used to.
         case "absolute":
         case "nopercentage":
           options.ignorePercentages = true;
-          currentModifier = "";
           continue;
         case "limited":
           options.allowLimitedBuffs = true;
-          currentModifier = "";
           continue;
         case "silent":
           options.silent = true;
-          currentModifier = "";
+          continue;
+        case "plan":
+        case "dryrun":
+          options.dryRun = true;
           continue;
       }
       var numeric = parseNumber(token);
       if (numeric !== null) {
         if (currentModifier !== "") {
-          addTargets(targets, unrecognised, currentModifier, pendingValue, options);
+          addTargets(targets, unrecognised, currentModifier, pendingValue);
           currentModifier = "";
         }
         pendingValue = numeric;
@@ -1209,14 +1368,14 @@ function parseCommand(input) {
     _iterator2.f();
   }
   if (currentModifier !== "") {
-    addTargets(targets, unrecognised, currentModifier, pendingValue, options);
+    addTargets(targets, unrecognised, currentModifier, pendingValue);
   }
   return {
     targets,
     unrecognised,
     minTurns,
     maxEfficiency,
-    meatSpendPerTurnLimit,
+    meatPerAdventureLimit,
     options
   };
 }
@@ -1224,112 +1383,34 @@ function describeGoals(targets, minTurns) {
   var parts = targets.map(_ref => {
     var modifier = _ref.modifier,
       value = _ref.value;
+    if (value === null) return "".concat(modifier, " as high as possible");
     var direction = value > 0 ? " up to " : " down to ";
     var suffix = SHOWN_AS_PERCENT.has(modifier) ? "%" : "";
-    return "".concat(modifier).concat(direction).concat(value).concat(suffix);
+    return "".concat(modifier).concat(direction).concat(formatNumber(value)).concat(suffix);
   });
   var turns = minTurns !== 1 ? ", for ".concat(minTurns, " turns") : "";
   return "Buffing ".concat(parts.join(", ")).concat(turns, "...");
 }
 function printUsage() {
   kolmafia.printHtml("<strong>silent</strong>: don't output text (useful in libraries)");
+  kolmafia.printHtml("<strong>plan/dryrun</strong>: print the plan and its cost without buying anything");
   kolmafia.printHtml("<strong>limited</strong>: allow limited buffs");
   kolmafia.printHtml("<strong>absolute/nopercentage</strong>: don't take into account percentage buffs for muscle/mysticality/moxie/hp/mp");
   kolmafia.printHtml("<strong>X turns/turn</strong>: number of turns to gain");
-  kolmafia.printHtml("<strong>X maxmeatspent</strong>: don't spend more meat than this");
+  kolmafia.printHtml("<strong>X totalmeat</strong>: total meat to spend. No limit by default, except that a goal " + "with no target value is capped at ".concat(formatNumber(OPEN_ENDED_MEAT_LIMIT), " meat, having ") + "nothing else to stop it.");
   kolmafia.printHtml("<strong>X efficiency/eff</strong>: set efficiency limit, which avoids expensive effects");
-  kolmafia.printHtml("<strong>X spendperturn/spt</strong>: sets a total spend limit per turn, shared across all effects.");
+  kolmafia.printHtml("<strong>X meatperadventure/mpa</strong>: cap the meat spent per adventure of effect, shared across all effects.");
   kolmafia.printHtml("");
   kolmafia.printHtml("Example usage:");
   kolmafia.printHtml("<strong>embiggen 400 initiative</strong>: buff to 400 initiative, as efficiently as possible");
   kolmafia.printHtml("<strong>embiggen 20 familiar weight 50 turns</strong>: buff to 20 familiar weight, for a minimum of 50 turns");
   kolmafia.printHtml("<strong>embiggen 400 init 20 familiar weight 300 muscle 50 turns</strong>: buff familiar weight up to 20, initiative up to 400, and muscle up to 300, for 50 turns.");
-  kolmafia.printHtml("<strong>embiggen 10000 monster level 10000 maxmeatspent</strong>: spend 10k meat on +monster level");
+  kolmafia.printHtml("<strong>embiggen 10000 monster level 10000 totalmeat</strong>: spend 10k meat on +monster level");
   kolmafia.printHtml("<strong>embiggen weapon damage 0.5 efficiency</strong>: gain weapon damage while only using cheap effect sources - efficiency value can be tuned");
-  kolmafia.printHtml("<strong>embiggen hp 100 spendperturn</strong>: gain HP while spending up to one hundred meat per turn, total, across all effects gained. Better than efficiency.");
+  kolmafia.printHtml("<strong>embiggen hp 100 mpa</strong>: gain HP while spending up to one hundred meat per adventure of effect, total, across all effects gained. Better than efficiency.");
 }
 
-var _templateObject$3, _templateObject2$3, _templateObject3$3, _templateObject4$3, _templateObject5$3, _templateObject6$3, _templateObject7$3, _templateObject8$3, _templateObject9$3, _templateObject0$2, _templateObject1$2, _templateObject10$2, _templateObject11$2, _templateObject12$1, _templateObject13$1, _templateObject14, _templateObject15, _templateObject16, _templateObject17, _templateObject18, _templateObject19, _templateObject20, _templateObject21, _templateObject22, _templateObject23;
-var FIXED_BLOCKED_EFFECTS = new Set($effects(_templateObject$3 || (_templateObject$3 = _taggedTemplateLiteral(["Cowrruption, Visions of the Deep Dark Deeps"]))));
-var CHEAT_CODES = new Set($skills(_templateObject2$3 || (_templateObject2$3 = _taggedTemplateLiteral(["CHEAT CODE: Triple Size, CHEAT CODE: Invisible Avatar"]))));
-var BLESSINGS = new Set($skills(_templateObject3$3 || (_templateObject3$3 = _taggedTemplateLiteral(["Blessing of the Storm Tortoise, Blessing of She-Who-Was, Blessing of the War Snapper"]))));
-var DISDAINS = $effects(_templateObject4$3 || (_templateObject4$3 = _taggedTemplateLiteral(["Disdain of the War Snapper, Disdain of She-Who-Was, Disdain of the Storm Tortoise"])));
-
-/** Songs that additionally require an accordion thief of at least level 15. */
-var RICHIE_SONGS = new Set($skills(_templateObject5$3 || (_templateObject5$3 = _taggedTemplateLiteral(["The Ballad of Richie Thingfinder, Benetton's Medley of Diversity, Elron's Explosive Etude, Chorale of Companionship, Prelude of Precision"]))));
-var ACCORDION_SONGS = [].concat(_toConsumableArray($skills(_templateObject6$3 || (_templateObject6$3 = _taggedTemplateLiteral(["The Moxious Madrigal, The Magical Mojomuscular Melody, Cletus's Canticle of Celerity, The Power Ballad of the Arrowsmith, The Polka of Plenty, Jackasses' Symphony of Destruction, Fat Leon's Phat Loot Lyric, Brawnee's Anthem of Absorption, The Psalm of Pointiness, Stevedave's Shanty of Superiority, Aloysius' Antiphon of Aptitude, The Ode to Booze, The Sonata of Sneakiness, Carlweather's Cantata of Confrontation, Ur-Kel's Aria of Annoyance, Dirge of Dreadfulness, Donho's Bubbly Ballad, Cringle's Curative Carol, Inigo's Incantation of Inspiration"])))), _toConsumableArray(RICHIE_SONGS));
-var SONG_EFFECTS = new Set(ACCORDION_SONGS.map(skill => kolmafia.toEffect(skill)));
-var MUTUAL_EXCLUSION_SETS = [$effects(_templateObject7$3 || (_templateObject7$3 = _taggedTemplateLiteral(["Snarl of the Timberwolf, Scowl of the Auk, Stiff Upper Lip, Patient Smile, Quiet Determination, Arched Eyebrow of the Archmage, Wizard Squint, Quiet Judgement, Icy Glare, Wry Smile, Disco Leer, Disco Smirk, Suspicious Gaze, Knowing Smile, Quiet Desperation"]))), $effects(_templateObject8$3 || (_templateObject8$3 = _taggedTemplateLiteral(["Song of the North, Song of Slowness, Song of Starch, Song of Sauce, Song of Bravado"]))), $effects(_templateObject9$3 || (_templateObject9$3 = _taggedTemplateLiteral(["Purple Tongue, Green Tongue, Orange Tongue, Red Tongue, Blue Tongue"]))), $effects(_templateObject0$2 || (_templateObject0$2 = _taggedTemplateLiteral(["Broken Heart, Fiery Heart, Cold Hearted, Sweet Heart, Withered Heart, Lustful Heart"]))), $effects(_templateObject1$2 || (_templateObject1$2 = _taggedTemplateLiteral(["Bloody Potato Bits, Legendary Bloody Potato Bits"]))), $effects(_templateObject10$2 || (_templateObject10$2 = _taggedTemplateLiteral(["Slinking Noodle Glob, Legendary Slinking Noodle Glob"]))), $effects(_templateObject11$2 || (_templateObject11$2 = _taggedTemplateLiteral(["Whispering Strands, Legendary Whispering Strands"]))), $effects(_templateObject12$1 || (_templateObject12$1 = _taggedTemplateLiteral(["Macaroni Coating, Legendary Macaroni Coating"]))), $effects(_templateObject13$1 || (_templateObject13$1 = _taggedTemplateLiteral(["Penne Fedora, Legendary Penne Fedora"]))), $effects(_templateObject14 || (_templateObject14 = _taggedTemplateLiteral(["Pasta Eyeball, Legendary Pasta Eyeball"]))), $effects(_templateObject15 || (_templateObject15 = _taggedTemplateLiteral(["Spice Haze, Legendary Spice Haze"])))];
-var HEARTSTONE_SKILLS = [[kolmafia.Skill.get("Heartstone: %banish"), "heartstoneBanishUnlocked"], [kolmafia.Skill.get("Heartstone: %buff"), "heartstoneBuffUnlocked"], [kolmafia.Skill.get("Heartstone: %kill"), "heartstoneKillUnlocked"], [kolmafia.Skill.get("Heartstone: %luck"), "heartstoneLuckUnlocked"], [kolmafia.Skill.get("Heartstone: %pals"), "heartstonePalsUnlocked"], [kolmafia.Skill.get("Heartstone: %stun"), "heartstoneStunUnlocked"]];
-var ALWAYS_BLOCKED_SKILLS = $skills(_templateObject16 || (_templateObject16 = _taggedTemplateLiteral(["Drench Yourself in Sweat, Spirit of Peppermint, Spirit of Cayenne, Spirit of Garlic, Spirit of Wormwood, Spirit of Bacon Grease"])));
-
-// Items mafia can't acquire cleanly, or that we simply never want to use.
-var UNWANTED_ITEMS = $items(_templateObject17 || (_templateObject17 = _taggedTemplateLiteral(["M-242, snake, sparkler, Mer-kin strongjuice, Mer-kin smartjuice, Mer-kin cooljuice, pirate tract, pirate pamphlet, pirate brochure, elven suicide capsule, Ghost Dog Chow, Yummy Tummy bean"])));
-
-/** Skills whose buffs clash with our own class kit, so gaining them would bounce. */
-function classConflictSkills() {
-  if (kolmafia.myClass() === $class(_templateObject18 || (_templateObject18 = _taggedTemplateLiteral(["Turtle Tamer"])))) return _toConsumableArray(BLESSINGS);
-  if (kolmafia.myClass() === $class(_templateObject19 || (_templateObject19 = _taggedTemplateLiteral(["Pastamancer"])))) {
-    return kolmafia.Thrall.all().map(thrall => thrall.skill).filter(skill => skill !== $skill(_templateObject20 || (_templateObject20 = _taggedTemplateLiteral(["none"]))));
-  }
-  return [];
-}
-
-/** Heartstone skills the player hasn't unlocked. */
-function lockedHeartstoneSkills() {
-  return HEARTSTONE_SKILLS.filter(_ref => {
-    var _ref2 = _slicedToArray(_ref, 2),
-      skill = _ref2[0],
-      pref = _ref2[1];
-    return skill !== $skill(_templateObject21 || (_templateObject21 = _taggedTemplateLiteral(["none"]))) && !get(pref, false);
-  }).map(_ref3 => {
-    var _ref4 = _slicedToArray(_ref3, 1),
-      skill = _ref4[0];
-    return skill;
-  });
-}
-
-/** Skills with a per-day cap, treated as limited buffs and skipped by default. */
-function dailyLimitedSkills() {
-  return kolmafia.Skill.all().filter(skill => skill.dailylimit > 0 || skill.dailylimitpref !== "");
-}
-
-/** Crystallized pumpkin spice is only worth using in autumn (Sep–Nov). */
-function outOfSeasonItems() {
-  var month = Number(kolmafia.todayToString().slice(4, 6));
-  return month < 9 || month > 11 ? [$item(_templateObject22 || (_templateObject22 = _taggedTemplateLiteral(["crystallized pumpkin spice"])))] : [];
-}
-function buildRestrictions(options) {
-  var blockedSkills = new Set([].concat(_toConsumableArray(classConflictSkills()), _toConsumableArray(ALWAYS_BLOCKED_SKILLS), _toConsumableArray(lockedHeartstoneSkills()), _toConsumableArray(options.allowLimitedBuffs ? [] : dailyLimitedSkills())));
-  var blockedItems = new Set([].concat(_toConsumableArray(outOfSeasonItems()), _toConsumableArray(UNWANTED_ITEMS)));
-  return {
-    blockedSkills,
-    blockedItems
-  };
-}
-function isSongEffect(effect) {
-  return SONG_EFFECTS.has(effect);
-}
-function songSlotsFull() {
-  var limit = have($skill(_templateObject23 || (_templateObject23 = _taggedTemplateLiteral(["Mariachi Memory"])))) ? 4 : 3;
-  var active = sum(_toConsumableArray(SONG_EFFECTS), effect => kolmafia.haveEffect(effect) > 0 ? 1 : 0);
-  return active >= limit;
-}
-
-/** True if a sibling in the effect's mutual-exclusion group is already active. */
-function mutuallyExcluded(effect) {
-  return MUTUAL_EXCLUSION_SETS.some(group => group.includes(effect) && group.some(member => member !== effect && kolmafia.haveEffect(member) > 0));
-}
-
-/** Turtle tamer blessings bounce each other, so never recast over an active one. */
-function isBlessing(skill) {
-  return BLESSINGS.has(skill);
-}
-function anyDisdainActive() {
-  return DISDAINS.some(effect => kolmafia.haveEffect(effect) > 0);
-}
-
-var _templateObject$2, _templateObject2$2, _templateObject3$2, _templateObject4$2, _templateObject5$2, _templateObject6$2, _templateObject7$2, _templateObject8$2, _templateObject9$2, _templateObject0$1, _templateObject1$1, _templateObject10$1, _templateObject11$1, _templateObject12, _templateObject13;
+var _templateObject$3, _templateObject2$3, _templateObject3$3, _templateObject4$3, _templateObject5$3, _templateObject6$3, _templateObject7$3, _templateObject8$3, _templateObject9$3, _templateObject0$2, _templateObject1$2, _templateObject10$2, _templateObject11$2, _templateObject12$1, _templateObject13$1;
 function activeBasestat(stat) {
   var value = kolmafia.myBasestat(stat);
   var limit = kolmafia.numericModifier("".concat(stat, " Limit"));
@@ -1350,23 +1431,660 @@ function effectiveModifier(effect, modifier, options) {
     return amount !== 0 ? amount / 100 * activeBasestat(stat) : 0;
   };
   switch (modifier) {
-    case $modifier(_templateObject$2 || (_templateObject$2 = _taggedTemplateLiteral(["Muscle"]))):
-      return base + fold($modifier(_templateObject2$2 || (_templateObject2$2 = _taggedTemplateLiteral(["Muscle Percent"]))), $stat(_templateObject3$2 || (_templateObject3$2 = _taggedTemplateLiteral(["Muscle"]))));
-    case $modifier(_templateObject4$2 || (_templateObject4$2 = _taggedTemplateLiteral(["Mysticality"]))):
-      return base + fold($modifier(_templateObject5$2 || (_templateObject5$2 = _taggedTemplateLiteral(["Mysticality Percent"]))), $stat(_templateObject6$2 || (_templateObject6$2 = _taggedTemplateLiteral(["Mysticality"]))));
-    case $modifier(_templateObject7$2 || (_templateObject7$2 = _taggedTemplateLiteral(["Moxie"]))):
-      return base + fold($modifier(_templateObject8$2 || (_templateObject8$2 = _taggedTemplateLiteral(["Moxie Percent"]))), $stat(_templateObject9$2 || (_templateObject9$2 = _taggedTemplateLiteral(["Moxie"]))));
+    case $modifier(_templateObject$3 || (_templateObject$3 = _taggedTemplateLiteral(["Muscle"]))):
+      return base + fold($modifier(_templateObject2$3 || (_templateObject2$3 = _taggedTemplateLiteral(["Muscle Percent"]))), $stat(_templateObject3$3 || (_templateObject3$3 = _taggedTemplateLiteral(["Muscle"]))));
+    case $modifier(_templateObject4$3 || (_templateObject4$3 = _taggedTemplateLiteral(["Mysticality"]))):
+      return base + fold($modifier(_templateObject5$3 || (_templateObject5$3 = _taggedTemplateLiteral(["Mysticality Percent"]))), $stat(_templateObject6$3 || (_templateObject6$3 = _taggedTemplateLiteral(["Mysticality"]))));
+    case $modifier(_templateObject7$3 || (_templateObject7$3 = _taggedTemplateLiteral(["Moxie"]))):
+      return base + fold($modifier(_templateObject8$3 || (_templateObject8$3 = _taggedTemplateLiteral(["Moxie Percent"]))), $stat(_templateObject9$3 || (_templateObject9$3 = _taggedTemplateLiteral(["Moxie"]))));
     // These two formulas are approximations inherited from the ASH version.
-    case $modifier(_templateObject0$1 || (_templateObject0$1 = _taggedTemplateLiteral(["Maximum MP"]))):
-      return base + effectiveModifier(effect, $modifier(_templateObject1$1 || (_templateObject1$1 = _taggedTemplateLiteral(["Mysticality"]))), options) / 100 * (1 + kolmafia.numericModifier($modifier(_templateObject10$1 || (_templateObject10$1 = _taggedTemplateLiteral(["Maximum MP Percent"])))) / 100);
-    case $modifier(_templateObject11$1 || (_templateObject11$1 = _taggedTemplateLiteral(["Maximum HP"]))):
-      return base + effectiveModifier(effect, $modifier(_templateObject12 || (_templateObject12 = _taggedTemplateLiteral(["Muscle"]))), options) / 100 * (1 + kolmafia.numericModifier($modifier(_templateObject13 || (_templateObject13 = _taggedTemplateLiteral(["Maximum HP Percent"])))) / 100);
+    case $modifier(_templateObject0$2 || (_templateObject0$2 = _taggedTemplateLiteral(["Maximum MP"]))):
+      return base + effectiveModifier(effect, $modifier(_templateObject1$2 || (_templateObject1$2 = _taggedTemplateLiteral(["Mysticality"]))), options) / 100 * (1 + kolmafia.numericModifier($modifier(_templateObject10$2 || (_templateObject10$2 = _taggedTemplateLiteral(["Maximum MP Percent"])))) / 100);
+    case $modifier(_templateObject11$2 || (_templateObject11$2 = _taggedTemplateLiteral(["Maximum HP"]))):
+      return base + effectiveModifier(effect, $modifier(_templateObject12$1 || (_templateObject12$1 = _taggedTemplateLiteral(["Muscle"]))), options) / 100 * (1 + kolmafia.numericModifier($modifier(_templateObject13$1 || (_templateObject13$1 = _taggedTemplateLiteral(["Maximum HP Percent"])))) / 100);
     default:
       return base;
   }
 }
 
+var _templateObject$2, _templateObject2$2, _templateObject3$2, _templateObject4$2, _templateObject5$2, _templateObject6$2, _templateObject7$2, _templateObject8$2, _templateObject9$2, _templateObject0$1, _templateObject1$1, _templateObject10$1, _templateObject11$1, _templateObject12, _templateObject13, _templateObject14, _templateObject15, _templateObject16, _templateObject17, _templateObject18, _templateObject19, _templateObject20, _templateObject21;
+var FIXED_BLOCKED_EFFECTS = new Set($effects(_templateObject$2 || (_templateObject$2 = _taggedTemplateLiteral(["Cowrruption, Visions of the Deep Dark Deeps"]))));
+var CHEAT_CODES = new Set($skills(_templateObject2$2 || (_templateObject2$2 = _taggedTemplateLiteral(["CHEAT CODE: Triple Size, CHEAT CODE: Invisible Avatar"]))));
+var BLESSINGS = new Set($skills(_templateObject3$2 || (_templateObject3$2 = _taggedTemplateLiteral(["Blessing of the Storm Tortoise, Blessing of She-Who-Was, Blessing of the War Snapper"]))));
+var DISDAINS = $effects(_templateObject4$2 || (_templateObject4$2 = _taggedTemplateLiteral(["Disdain of the War Snapper, Disdain of She-Who-Was, Disdain of the Storm Tortoise"])));
+
+/** Songs that additionally require an accordion thief of at least level 15. */
+var RICHIE_SONGS = new Set($skills(_templateObject5$2 || (_templateObject5$2 = _taggedTemplateLiteral(["The Ballad of Richie Thingfinder, Benetton's Medley of Diversity, Elron's Explosive Etude, Chorale of Companionship, Prelude of Precision"]))));
+var MUTUAL_EXCLUSION_SETS = [$effects(_templateObject6$2 || (_templateObject6$2 = _taggedTemplateLiteral(["Snarl of the Timberwolf, Scowl of the Auk, Stiff Upper Lip, Patient Smile, Quiet Determination, Arched Eyebrow of the Archmage, Wizard Squint, Quiet Judgement, Icy Glare, Wry Smile, Disco Leer, Disco Smirk, Suspicious Gaze, Knowing Smile, Quiet Desperation"]))), $effects(_templateObject7$2 || (_templateObject7$2 = _taggedTemplateLiteral(["Song of the North, Song of Slowness, Song of Starch, Song of Sauce, Song of Bravado"]))), $effects(_templateObject8$2 || (_templateObject8$2 = _taggedTemplateLiteral(["Purple Tongue, Green Tongue, Orange Tongue, Red Tongue, Blue Tongue"]))), $effects(_templateObject9$2 || (_templateObject9$2 = _taggedTemplateLiteral(["Broken Heart, Fiery Heart, Cold Hearted, Sweet Heart, Withered Heart, Lustful Heart"]))), $effects(_templateObject0$1 || (_templateObject0$1 = _taggedTemplateLiteral(["Bloody Potato Bits, Legendary Bloody Potato Bits"]))), $effects(_templateObject1$1 || (_templateObject1$1 = _taggedTemplateLiteral(["Slinking Noodle Glob, Legendary Slinking Noodle Glob"]))), $effects(_templateObject10$1 || (_templateObject10$1 = _taggedTemplateLiteral(["Whispering Strands, Legendary Whispering Strands"]))), $effects(_templateObject11$1 || (_templateObject11$1 = _taggedTemplateLiteral(["Macaroni Coating, Legendary Macaroni Coating"]))), $effects(_templateObject12 || (_templateObject12 = _taggedTemplateLiteral(["Penne Fedora, Legendary Penne Fedora"]))), $effects(_templateObject13 || (_templateObject13 = _taggedTemplateLiteral(["Pasta Eyeball, Legendary Pasta Eyeball"]))), $effects(_templateObject14 || (_templateObject14 = _taggedTemplateLiteral(["Spice Haze, Legendary Spice Haze"])))];
+var HEARTSTONE_SKILLS = [[kolmafia.Skill.get("Heartstone: %banish"), "heartstoneBanishUnlocked"], [kolmafia.Skill.get("Heartstone: %buff"), "heartstoneBuffUnlocked"], [kolmafia.Skill.get("Heartstone: %kill"), "heartstoneKillUnlocked"], [kolmafia.Skill.get("Heartstone: %luck"), "heartstoneLuckUnlocked"], [kolmafia.Skill.get("Heartstone: %pals"), "heartstonePalsUnlocked"], [kolmafia.Skill.get("Heartstone: %stun"), "heartstoneStunUnlocked"]];
+var ALWAYS_BLOCKED_SKILLS = $skills(_templateObject15 || (_templateObject15 = _taggedTemplateLiteral(["Drench Yourself in Sweat, Spirit of Peppermint, Spirit of Cayenne, Spirit of Garlic, Spirit of Wormwood, Spirit of Bacon Grease"])));
+
+// Items mafia can't acquire cleanly, or that we simply never want to use.
+var UNWANTED_ITEMS = $items(_templateObject16 || (_templateObject16 = _taggedTemplateLiteral(["M-242, snake, sparkler, Mer-kin strongjuice, Mer-kin smartjuice, Mer-kin cooljuice, pirate tract, pirate pamphlet, pirate brochure, elven suicide capsule, Ghost Dog Chow, Yummy Tummy bean"])));
+
+/** Skills whose buffs clash with our own class kit, so gaining them would bounce. */
+function classConflictSkills() {
+  if (kolmafia.myClass() === $class(_templateObject17 || (_templateObject17 = _taggedTemplateLiteral(["Turtle Tamer"])))) return _toConsumableArray(BLESSINGS);
+  if (kolmafia.myClass() === $class(_templateObject18 || (_templateObject18 = _taggedTemplateLiteral(["Pastamancer"])))) {
+    return kolmafia.Thrall.all().map(thrall => thrall.skill).filter(skill => skill !== $skill(_templateObject19 || (_templateObject19 = _taggedTemplateLiteral(["none"]))));
+  }
+  return [];
+}
+
+/** Heartstone skills the player hasn't unlocked. */
+function lockedHeartstoneSkills() {
+  return HEARTSTONE_SKILLS.filter(_ref => {
+    var _ref2 = _slicedToArray(_ref, 2),
+      skill = _ref2[0],
+      pref = _ref2[1];
+    return skill !== $skill(_templateObject20 || (_templateObject20 = _taggedTemplateLiteral(["none"]))) && !get(pref, false);
+  }).map(_ref3 => {
+    var _ref4 = _slicedToArray(_ref3, 1),
+      skill = _ref4[0];
+    return skill;
+  });
+}
+
+/** Skills with a per-day cap, treated as limited buffs and skipped by default. */
+function dailyLimitedSkills() {
+  return kolmafia.Skill.all().filter(skill => skill.dailylimit > 0 || skill.dailylimitpref !== "");
+}
+
+/** Crystallized pumpkin spice is only worth using in autumn (Sep–Nov). */
+function outOfSeasonItems() {
+  var month = Number(kolmafia.todayToString().slice(4, 6));
+  return month < 9 || month > 11 ? [$item(_templateObject21 || (_templateObject21 = _taggedTemplateLiteral(["crystallized pumpkin spice"])))] : [];
+}
+function buildRestrictions(options) {
+  var blockedSkills = new Set([].concat(_toConsumableArray(classConflictSkills()), _toConsumableArray(ALWAYS_BLOCKED_SKILLS), _toConsumableArray(lockedHeartstoneSkills()), _toConsumableArray(options.allowLimitedBuffs ? [] : dailyLimitedSkills())));
+  var blockedItems = new Set([].concat(_toConsumableArray(outOfSeasonItems()), _toConsumableArray(UNWANTED_ITEMS)));
+  return {
+    blockedSkills,
+    blockedItems
+  };
+}
+
+/**
+ * Song slots free right now, less any another target has claimed.
+ *
+ * libram reads all of this from game data: which effects are songs, and a limit
+ * that accounts for Four Songs and Additional Song rather than just Mariachi
+ * Memory. The list of songs we used to keep here went stale every time KoL
+ * added one.
+ */
+function freeSongSlots() {
+  var reserved = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
+  return Math.max(0, getSongLimit() - getSongCount() - reserved);
+}
+
+/** Effect -> the group it belongs to, so the planner can look one up directly. */
+var EXCLUSION_GROUPS = indexExclusionGroups();
+function indexExclusionGroups() {
+  var index = new Map();
+  for (var _i = 0, _MUTUAL_EXCLUSION_SET = MUTUAL_EXCLUSION_SETS; _i < _MUTUAL_EXCLUSION_SET.length; _i++) {
+    var members = _MUTUAL_EXCLUSION_SET[_i];
+    var group = {
+      id: "exclusion:".concat(members[0]),
+      members
+    };
+    var _iterator = _createForOfIteratorHelper(members),
+      _step;
+    try {
+      for (_iterator.s(); !(_step = _iterator.n()).done;) {
+        var effect = _step.value;
+        index.set(effect, group);
+      }
+    } catch (err) {
+      _iterator.e(err);
+    } finally {
+      _iterator.f();
+    }
+  }
+  return index;
+}
+
+/**
+ * A stable id shared by every effect that competes for the same slot, or
+ * `undefined` for an effect that clashes with nothing. The planner treats a
+ * group as "pick at most one" rather than locking in whichever came first.
+ */
+function exclusionGroupId(effect) {
+  var _EXCLUSION_GROUPS$get;
+  return (_EXCLUSION_GROUPS$get = EXCLUSION_GROUPS.get(effect)) === null || _EXCLUSION_GROUPS$get === void 0 ? void 0 : _EXCLUSION_GROUPS$get.id;
+}
+
+/**
+ * The sibling already up in this effect's group, if any.
+ *
+ * Gaining the effect would overwrite that sibling, so the planner prices the
+ * swap at the difference rather than writing the whole group off.
+ */
+function activeExclusionSibling(effect) {
+  var group = EXCLUSION_GROUPS.get(effect);
+  if (!group) return undefined;
+  return group.members.find(member => member !== effect && kolmafia.haveEffect(member) > 0);
+}
+
+/** Turtle tamer blessings bounce each other, so never recast over an active one. */
+function isBlessing(skill) {
+  return BLESSINGS.has(skill);
+}
+function anyDisdainActive() {
+  return DISDAINS.some(effect => kolmafia.haveEffect(effect) > 0);
+}
+
+/**
+ * The buffing problem, stated honestly: choose a set of effects that moves a
+ * modifier at least `need` points, as cheaply as possible. That is a minimum-cost
+ * covering knapsack, and this module solves it over plain numbers.
+ *
+ * Deliberately free of `kolmafia` imports — `plan.ts` translates game state into
+ * `Candidate`s first. That seam is what makes the algorithm unit-testable.
+ */
+
+/** Progress and cost are compared with a tolerance; they are sums of floats. */
+var EPSILON = 1e-9;
+
+/** Cells along the DP's progress axis. Sets the resolution, and the cost. */
+var DEFAULT_MAX_CELLS = 1500;
+
+/** Times to halve the quantum when every candidate rounds away to nothing. */
+var QUANTUM_RETRIES = 3;
+
+/**
+ * Cells below the goal to reconstruct and re-check on exact floats. Gains are
+ * rounded down, so the shortfall of a set scored just under the goal is at most
+ * one quantum per effect chosen — far inside this window.
+ */
+var RECONSTRUCT_SCAN = 64;
+
+/** A way to move the modifier, already costed and sign-normalised. */
+
+/** A `SolveRequest` with defaults filled in and unusable candidates removed. */
+
+function capacityOf(capacities, slot) {
+  var value = capacities[slot];
+  return value === undefined ? Infinity : value;
+}
+
+/**
+ * Drop group members that another member of the same group beats on both axes.
+ *
+ * Only sound *within* an exclusion group, where at most one member is ever
+ * chosen. Globally it would be wrong: with `need = 10`, A (progress 6, cost 1)
+ * beats B (progress 5, cost 1) on both axes, yet the only solution is A *and* B.
+ */
+function pruneDominated(candidates) {
+  var byGroup = new Map();
+  var _iterator = _createForOfIteratorHelper(candidates),
+    _step;
+  try {
+    for (_iterator.s(); !(_step = _iterator.n()).done;) {
+      var candidate = _step.value;
+      if (candidate.group === undefined) continue;
+      var members = byGroup.get(candidate.group);
+      if (members) members.push(candidate);else byGroup.set(candidate.group, [candidate]);
+    }
+  } catch (err) {
+    _iterator.e(err);
+  } finally {
+    _iterator.f();
+  }
+  var dropped = new Set();
+  var _iterator2 = _createForOfIteratorHelper(byGroup.values()),
+    _step2;
+  try {
+    for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+      var _members = _step2.value;
+      // Cheapest first, so every earlier member costs no more than the current one;
+      // it therefore dominates unless the current one makes strictly more progress.
+      var ordered = _members.slice().sort((a, b) => a.cost - b.cost || b.progress - a.progress);
+      var bestProgress = -Infinity;
+      var _iterator3 = _createForOfIteratorHelper(ordered),
+        _step3;
+      try {
+        for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
+          var member = _step3.value;
+          if (member.progress > bestProgress + EPSILON) bestProgress = member.progress;else dropped.add(member);
+        }
+      } catch (err) {
+        _iterator3.e(err);
+      } finally {
+        _iterator3.f();
+      }
+    }
+  } catch (err) {
+    _iterator2.e(err);
+  } finally {
+    _iterator2.f();
+  }
+  return dropped.size === 0 ? candidates : candidates.filter(c => !dropped.has(c));
+}
+
+/** Normalise a request: drop what we can't use, and collapse duplicate ids. */
+function prepareCandidates(request) {
+  var slotCapacity = request.slotCapacity ?? {};
+  var budget = Math.max(0, request.budget);
+
+  // Cheapest wins for a repeated id; ties go to the larger gain.
+  var byId = new Map();
+  var _iterator4 = _createForOfIteratorHelper(request.candidates),
+    _step4;
+  try {
+    for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
+      var candidate = _step4.value;
+      var progress = candidate.progress,
+        cost = candidate.cost;
+      if (!isFinite(progress) || progress <= 0) continue;
+      if (!isFinite(cost) || cost < 0) continue;
+      var existing = byId.get(candidate.id);
+      if (!existing || cost < existing.cost || cost === existing.cost && progress > existing.progress) {
+        byId.set(candidate.id, candidate);
+      }
+    }
+  } catch (err) {
+    _iterator4.e(err);
+  } finally {
+    _iterator4.f();
+  }
+  var budgetBound = false;
+  var affordable = [];
+  var _iterator5 = _createForOfIteratorHelper(byId.values()),
+    _step5;
+  try {
+    for (_iterator5.s(); !(_step5 = _iterator5.n()).done;) {
+      var _candidate = _step5.value;
+      // A slot class with no free slots rules its members out entirely.
+      if (_candidate.slot !== undefined && capacityOf(slotCapacity, _candidate.slot) < 1) continue;
+      if (_candidate.cost > budget) budgetBound = true;else affordable.push(_candidate);
+    }
+  } catch (err) {
+    _iterator5.e(err);
+  } finally {
+    _iterator5.f();
+  }
+  return {
+    candidates: pruneDominated(affordable),
+    need: request.need,
+    budget,
+    slotCapacity,
+    budgetBound
+  };
+}
+function unsatisfiedReason(prepared, priceBlocked) {
+  if (prepared.budgetBound || priceBlocked) return "budget-capped";
+  if (prepared.candidates.length === 0) return "empty";
+  return "unreachable";
+}
+
+/**
+ * The capacity-limited class the DP has to track, if any.
+ *
+ * A class only earns an axis when more candidates compete for it than there are
+ * slots; songs affecting any one modifier rarely fill the rack, so this usually
+ * costs nothing. Only one class is tracked, because KoL has only one — accordion
+ * songs. A second *binding* class would go unconstrained.
+ */
+
+function bindingSlot(candidates, capacities) {
+  var counts = new Map();
+  var _iterator6 = _createForOfIteratorHelper(candidates),
+    _step6;
+  try {
+    for (_iterator6.s(); !(_step6 = _iterator6.n()).done;) {
+      var candidate = _step6.value;
+      if (candidate.slot === undefined) continue;
+      counts.set(candidate.slot, (counts.get(candidate.slot) ?? 0) + 1);
+    }
+  } catch (err) {
+    _iterator6.e(err);
+  } finally {
+    _iterator6.f();
+  }
+  var _iterator7 = _createForOfIteratorHelper(counts),
+    _step7;
+  try {
+    for (_iterator7.s(); !(_step7 = _iterator7.n()).done;) {
+      var _step7$value = _slicedToArray(_step7.value, 2),
+        slot = _step7$value[0],
+        count = _step7$value[1];
+      var capacity = capacityOf(capacities, slot);
+      if (isFinite(capacity) && count > capacity) return {
+        slot,
+        capacity
+      };
+    }
+  } catch (err) {
+    _iterator7.e(err);
+  } finally {
+    _iterator7.f();
+  }
+  return null;
+}
+
+/** The most progress any valid selection could make, respecting the constraints. */
+function achievableProgress(candidates, axis) {
+  var groupBest = new Map();
+  var slotted = [];
+  var total = 0;
+  var _iterator8 = _createForOfIteratorHelper(candidates),
+    _step8;
+  try {
+    for (_iterator8.s(); !(_step8 = _iterator8.n()).done;) {
+      var candidate = _step8.value;
+      if (candidate.group !== undefined) {
+        var current = groupBest.get(candidate.group) ?? 0;
+        if (candidate.progress > current) groupBest.set(candidate.group, candidate.progress);
+      } else if (axis && candidate.slot === axis.slot) {
+        slotted.push(candidate.progress);
+      } else {
+        total += candidate.progress;
+      }
+    }
+  } catch (err) {
+    _iterator8.e(err);
+  } finally {
+    _iterator8.f();
+  }
+  var _iterator9 = _createForOfIteratorHelper(groupBest.values()),
+    _step9;
+  try {
+    for (_iterator9.s(); !(_step9 = _iterator9.n()).done;) {
+      var best = _step9.value;
+      total += best;
+    }
+  } catch (err) {
+    _iterator9.e(err);
+  } finally {
+    _iterator9.f();
+  }
+  if (axis) {
+    slotted.sort((a, b) => b - a);
+    for (var i = 0; i < Math.min(axis.capacity, slotted.length); i++) total += slotted[i];
+  }
+  return total;
+}
+
+/**
+ * Candidates in DP layer order: ungrouped first, then each exclusion group's
+ * members contiguously so a group can be skipped in one jump.
+ */
+function layerOrder(candidates) {
+  var items = [];
+  var groups = new Map();
+  var _iterator0 = _createForOfIteratorHelper(candidates),
+    _step0;
+  try {
+    for (_iterator0.s(); !(_step0 = _iterator0.n()).done;) {
+      var candidate = _step0.value;
+      if (candidate.group === undefined) {
+        items.push(candidate);
+        continue;
+      }
+      var members = groups.get(candidate.group);
+      if (members) members.push(candidate);else groups.set(candidate.group, [candidate]);
+    }
+
+    // -1 for a layer that stands alone, otherwise the first layer of its group.
+  } catch (err) {
+    _iterator0.e(err);
+  } finally {
+    _iterator0.f();
+  }
+  var groupStart = [];
+  for (var i = 0; i < items.length; i++) groupStart.push(-1);
+  var _iterator1 = _createForOfIteratorHelper(groups.values()),
+    _step1;
+  try {
+    for (_iterator1.s(); !(_step1 = _iterator1.n()).done;) {
+      var _members2 = _step1.value;
+      var start = items.length;
+      var _iterator10 = _createForOfIteratorHelper(_members2),
+        _step10;
+      try {
+        for (_iterator10.s(); !(_step10 = _iterator10.n()).done;) {
+          var member = _step10.value;
+          items.push(member);
+          groupStart.push(start);
+        }
+      } catch (err) {
+        _iterator10.e(err);
+      } finally {
+        _iterator10.f();
+      }
+    }
+  } catch (err) {
+    _iterator1.e(err);
+  } finally {
+    _iterator1.f();
+  }
+  return {
+    items,
+    groupStart
+  };
+}
+
+/**
+ * Exact minimum-cost cover by dynamic programming.
+ *
+ * `best[j]` is the least cost to move the modifier at least `j` quantised
+ * points, so **one table answers both usage modes**: "reach X" reads the top
+ * cell, and "spend up to N meat" reads the highest cell still within budget.
+ *
+ * The table is bounded by what is physically achievable rather than by the
+ * goal, so an open-ended goal — `need` of `Infinity` — costs no more than a
+ * modest one.
+ */
+function solve(request) {
+  var prepared = prepareCandidates(request);
+  var candidates = prepared.candidates,
+    need = prepared.need,
+    budget = prepared.budget;
+  if (need <= EPSILON || candidates.length === 0) {
+    return {
+      chosen: [],
+      cost: 0,
+      progress: 0,
+      satisfied: need <= EPSILON,
+      reason: need <= EPSILON ? "solved" : unsatisfiedReason(prepared, false),
+      stats: {
+        candidates: candidates.length,
+        cells: 0,
+        quantum: 0
+      }
+    };
+  }
+  var maxCells = Math.max(1, Math.floor(request.maxCells ?? DEFAULT_MAX_CELLS));
+  var axis = bindingSlot(candidates, prepared.slotCapacity);
+  var states = axis ? axis.capacity + 1 : 1;
+  var rawCap = Math.min(need, achievableProgress(candidates, axis));
+  var _layerOrder = layerOrder(candidates),
+    items = _layerOrder.items,
+    groupStart = _layerOrder.groupStart;
+
+  // Round gains DOWN and the goal UP, so a plan the table believes covers the
+  // goal really does; the residual re-plan mops up the rounding.
+  var quantum = rawCap / maxCells;
+  var cells = 0;
+  var steps = [];
+  for (var attempt = 0;; attempt++) {
+    cells = Math.max(1, Math.ceil(rawCap / quantum));
+    steps = items.map(item => Math.min(cells, Math.floor(item.progress / quantum)));
+    if (steps.some(step => step > 0) || attempt >= QUANTUM_RETRIES) break;
+    quantum /= 2;
+  }
+
+  // `best[state * width + j]`: least cost to move `j` quantised points having
+  // used `state` of the limited slots. Slot state 0 is the start.
+  var width = cells + 1;
+  var best = [];
+  for (var i = 0; i < states * width; i++) best.push(Infinity);
+  best[0] = 0;
+
+  // 1 for a layer that consumes a slot, 0 otherwise.
+  var slotStep = items.map(item => axis && item.slot === axis.slot ? 1 : 0);
+  var words = Math.ceil(states * width / 32);
+  var used = [];
+  for (var _i = 0; _i < items.length * words; _i++) used.push(0);
+  var mark = (layer, at) => {
+    used[layer * words + (at >> 5)] |= 1 << (at & 31);
+  };
+  var marked = (layer, at) => (used[layer * words + (at >> 5)] & 1 << (at & 31)) !== 0;
+
+  // Descending `j` reads only cells this layer hasn't written, giving 0/1
+  // semantics; descending slot state does the same across the slot axis. Group
+  // members all read a snapshot from before the group, so at most one of them
+  // can appear in any chain.
+  var groupSnapshot = null;
+  for (var layer = 0; layer < items.length; layer++) {
+    // Snapshot before the skip: a group whose first member rounds away to
+    // nothing must still get its own snapshot for the members that follow.
+    var start = groupStart[layer];
+    if (start === -1) groupSnapshot = null;else if (start === layer) groupSnapshot = best.slice();
+    var step = steps[layer];
+    if (step <= 0) continue;
+    var weight = items[layer].cost;
+    var source = groupSnapshot ?? best;
+    var takesSlot = slotStep[layer];
+    for (var state = states - 1; state >= 0; state--) {
+      // Taking this item uses a slot, so there has to be one spare.
+      if (takesSlot > 0 && axis && state >= axis.capacity) continue;
+      var from = state * width;
+      var to = (state + takesSlot) * width;
+      for (var j = cells; j >= 1; j--) {
+        var previous = source[from + (j - step > 0 ? j - step : 0)];
+        var candidate = previous + weight;
+        if (candidate < best[to + j] - EPSILON) {
+          best[to + j] = candidate;
+          mark(layer, to + j);
+        }
+      }
+    }
+  }
+  var reconstruct = (targetCell, targetState) => {
+    var picked = [];
+    var cell = targetCell;
+    var state = targetState;
+    for (var _layer = items.length - 1; _layer >= 0 && cell > 0; _layer--) {
+      if (!marked(_layer, state * width + cell)) continue;
+      picked.push(items[_layer]);
+      var _step11 = steps[_layer];
+      cell = cell - _step11 > 0 ? cell - _step11 : 0;
+      state -= slotStep[_layer];
+      // A group member's predecessor is the state from before the whole group.
+      if (groupStart[_layer] !== -1) _layer = groupStart[_layer];
+    }
+    return picked.reverse();
+  };
+  var totals = set => {
+    var cost = 0;
+    var progress = 0;
+    var _iterator11 = _createForOfIteratorHelper(set),
+      _step12;
+    try {
+      for (_iterator11.s(); !(_step12 = _iterator11.n()).done;) {
+        var item = _step12.value;
+        cost += item.cost;
+        progress += item.progress;
+      }
+    } catch (err) {
+      _iterator11.e(err);
+    } finally {
+      _iterator11.f();
+    }
+    return {
+      cost,
+      progress
+    };
+  };
+
+  // Rounding gains down means the top cell over-covers: a set the table scores
+  // just short of the goal usually clears it on the exact floats, for less meat.
+  // The shortfall is at most one quantum per chosen effect, so a short scan down
+  // from the top finds it.
+  var chosen = [];
+  var cheapest = Infinity;
+  var scanFloor = Math.max(0, cells - RECONSTRUCT_SCAN);
+  for (var _j = cells; _j >= scanFloor; _j--) {
+    for (var _state = 0; _state < states; _state++) {
+      var _weight = best[_state * width + _j];
+      if (!isFinite(_weight) || _weight > budget + EPSILON || _weight >= cheapest) continue;
+      var set = reconstruct(_j, _state);
+      var _totals = totals(set),
+        _cost = _totals.cost,
+        _progress = _totals.progress;
+      if (_progress + EPSILON < need || _cost > budget + EPSILON) continue;
+      chosen = set;
+      cheapest = _weight;
+    }
+  }
+
+  // Nothing covers the goal, so fall back to the most progress the budget buys.
+  if (cheapest === Infinity) {
+    for (var _j2 = cells; _j2 >= 1 && chosen.length === 0; _j2--) {
+      for (var _state2 = 0; _state2 < states; _state2++) {
+        var _weight2 = best[_state2 * width + _j2];
+        // An unreachable cell is `Infinity`, which an unlimited budget would
+        // otherwise happily "afford".
+        if (!isFinite(_weight2) || _weight2 > budget + EPSILON) continue;
+        chosen = reconstruct(_j2, _state2);
+        break;
+      }
+    }
+  }
+  var _totals2 = totals(chosen),
+    cost = _totals2.cost,
+    progress = _totals2.progress;
+  var satisfied = progress + EPSILON >= need;
+  var stats = {
+    candidates: candidates.length,
+    cells,
+    quantum
+  };
+  if (satisfied) {
+    return {
+      chosen,
+      cost,
+      progress,
+      satisfied: true,
+      reason: "solved",
+      stats
+    };
+  }
+
+  // Short of the goal: say whether more meat would have helped.
+  var topWeight = Infinity;
+  for (var _state3 = 0; _state3 < states; _state3++) {
+    topWeight = Math.min(topWeight, best[_state3 * width + cells]);
+  }
+  var priceBlocked = isFinite(topWeight) && topWeight > budget + EPSILON;
+  return {
+    chosen,
+    cost,
+    progress,
+    satisfied: false,
+    reason: unsatisfiedReason(prepared, priceBlocked),
+    stats
+  };
+}
+
 var _templateObject$1, _templateObject2$1, _templateObject3$1, _templateObject4$1, _templateObject5$1, _templateObject6$1, _templateObject7$1, _templateObject8$1, _templateObject9$1, _templateObject0, _templateObject1, _templateObject10, _templateObject11;
+
+/** Cap on uses of one source in a single step, inherited from the ASH version. */
+var MAX_USES = 10;
+
+/**
+ * The most we will pay for one copy of anything.
+ *
+ * mafia's own auto-buy ceiling, so the limit is whatever the user already told
+ * mafia rather than a number this script invented. `buy` with an explicit price
+ * bypasses the setting, so we have to apply it ourselves. Zero means no limit,
+ * matching how mafia reads it.
+ */
+function priceCeiling() {
+  var limit = get("autoBuyPriceLimit", 20000);
+  return limit > 0 ? limit : Infinity;
+}
 var HOLO_RECORDS = new Set($items(_templateObject$1 || (_templateObject$1 = _taggedTemplateLiteral(["Shrieking Weasel holo-record, Power-Guy 2000 holo-record, Lucky Strikes holo-record, EMD holo-record, Superdrifter holo-record, The Pigs holo-record, Drunk Uncles holo-record"]))));
 /** A single way to gain an effect: either an item to use or a skill to cast. */
 var Source = /*#__PURE__*/function () {
@@ -1380,20 +2098,28 @@ var Source = /*#__PURE__*/function () {
     value: function warmPrice(_canAccessMall) {
       // Only items have a mall price worth pre-fetching.
     }
+
+    /** Uses needed to hold the effect for `minTurns`, given `active` turns already up. */
   }, {
-    key: "meatPerTurn",
-    value: function meatPerTurn() {
-      return this.baseCost / this.turnsPerUse;
+    key: "usesFor",
+    value: function usesFor(minTurns, active) {
+      return clamp(Math.ceil((minTurns - active) / Math.max(1, this.turnsPerUse)), 1, MAX_USES);
+    }
+
+    /**
+     * What it really costs to hold this effect for the whole requirement. The old
+     * scoring priced a single use and then bought several, so a short potion
+     * looked far cheaper than it was.
+     */
+  }, {
+    key: "costFor",
+    value: function costFor(minTurns, active) {
+      return this.baseCost * this.usesFor(minTurns, active);
     }
   }, {
-    key: "efficiency",
-    value: function efficiency(target, options) {
-      var cost = this.baseCost;
-      if (cost <= 0) return 0;
-      var turns = Math.min(target.reasonableTurns, this.turnsPerUse);
-      var gained = Math.min(target.value - kolmafia.numericModifier(target.modifier), effectiveModifier(this.effect, target.modifier, options));
-      var combined = gained * turns;
-      return combined === 0 ? 10000 : cost / combined;
+    key: "meatPerAdventure",
+    value: function meatPerAdventure() {
+      return this.baseCost / this.turnsPerUse;
     }
   }]);
 }();
@@ -1435,40 +2161,94 @@ var ItemSource = /*#__PURE__*/function (_Source) {
       if (this.item.tradeable && canAccessMall) kolmafia.mallPrice(this.item);
     }
   }, {
+    key: "feasible",
+    value: function feasible(_options, canAccessMall) {
+      var owned = kolmafia.availableAmount(this.item);
+      if (!this.item.tradeable && owned === 0) return false;
+      if (owned === 0 && !canAccessMall) return false;
+      if (owned === 0 && this.item.tradeable && kolmafia.historicalPrice(this.item) > priceCeiling()) {
+        return false;
+      }
+      if (!this.item.tradeable && !this.item.reusable) return false;
+      if (this.item.reusable && this.item.dailyusesleft === 0) return false;
+      return true;
+    }
+  }, {
     key: "plan",
     value: function plan(options, state, canAccessMall) {
+      var uses = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 1;
+      var meatCap = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : Infinity;
+      // Only the copies we don't already have need buying — and a reusable item
+      // serves every use from the one copy, so buying `uses` of it would be meat
+      // spent on nothing (and meat the solver scored at zero, since `baseCost`
+      // treats an owned reusable as free).
       var owned = kolmafia.availableAmount(this.item);
-      if (!this.item.tradeable && owned === 0) return null;
-      if (owned === 0 && !canAccessMall) return null;
-      // Owned items are free to use; only unowned ones need buying from the mall.
-      var meatCost = 0;
+      var needed = this.item.reusable ? 1 : uses;
+      var toBuy = Math.max(0, needed - owned);
+      var unitPrice = 0;
       var wish = false;
-      if (owned === 0 && this.item.tradeable && canAccessMall) {
-        if (kolmafia.historicalPrice(this.item) >= 100000) return null;
-        meatCost = kolmafia.mallPrice(this.item);
+      var meatCost = 0;
+      if (toBuy > 0) {
+        if (!this.item.tradeable || !canAccessMall) return null;
+
+        // `retrievePrice` walks the listings, so this is what the whole batch
+        // really costs rather than the cheapest listing multiplied out. The
+        // ceiling for `buy` is then the price of the last copy in the batch.
+        meatCost = kolmafia.retrievePrice(this.item, owned + toBuy) - kolmafia.retrievePrice(this.item, owned);
+        unitPrice = toBuy > 1 ? meatCost - (kolmafia.retrievePrice(this.item, owned + toBuy - 1) - kolmafia.retrievePrice(this.item, owned)) : meatCost;
         var wishPrice = kolmafia.mallPrice($item(_templateObject2$1 || (_templateObject2$1 = _taggedTemplateLiteral(["pocket wish"]))));
-        if (meatCost >= 50000 && meatCost >= wishPrice) {
+        if (unitPrice >= 50000 && unitPrice >= wishPrice) {
           wish = true;
-          meatCost = wishPrice;
+          unitPrice = wishPrice;
+          meatCost = wishPrice * toBuy;
         }
-        if (state.meatSpent + meatCost > options.maxMeatToSpend) return null;
+        if (unitPrice > priceCeiling()) return null;
+        // The goal's own slice as well as the run-wide limit, so a per-goal rail
+        // still bites in a mode whose solver budget is denominated in something else.
+        if (state.meatSpent + meatCost > Math.min(meatCap, options.maxMeatToSpend)) return null;
       }
       if (!this.item.tradeable && !this.item.reusable) return null;
       if (this.item.reusable && this.item.dailyusesleft === 0) return null;
       return {
         meatCost,
+        unitPrice,
+        toBuy,
         wish
       };
     }
+
+    /**
+     * Buy what we're short of, then use what we have.
+     *
+     * `mallPrice` is the cheapest listing, but listings ladder upwards, so asking
+     * for several copies can cost more per copy than that suggests. Capping `buy`
+     * at the price we planned for means a steep ladder gets us fewer copies rather
+     * than a bigger bill — the next plan sees the shortfall and decides again.
+     */
   }, {
     key: "apply",
-    value: function apply(amount) {
-      // Using more than one d12 at a time skips the effect, so pace them out.
-      if (this.item === $item(_templateObject3$1 || (_templateObject3$1 = _taggedTemplateLiteral(["d12"])))) {
-        for (var i = 0; i < amount; i++) kolmafia.use(1, this.item);
-      } else {
-        kolmafia.use(amount, this.item);
+    value: function apply(amount, plan) {
+      var spent = 0;
+      if (plan.toBuy > 0 && plan.unitPrice > 0) {
+        var bought = kolmafia.buy(plan.toBuy, this.item, plan.unitPrice);
+        // Getting the whole batch costs what `plan` priced it at. Falling short
+        // means the ladder moved, and the last-copy ceiling is the best bound left.
+        spent = bought === plan.toBuy ? plan.meatCost : bought * plan.unitPrice;
       }
+      var usable = Math.min(amount, kolmafia.availableAmount(this.item));
+      if (usable <= 0) return spent;
+
+      // With the mall shut off, `use` cannot quietly top up what `buy` declined to
+      // overpay for; it can only spend what we already hold.
+      withProperty("autoSatisfyWithMall", false, () => {
+        // Using more than one d12 at a time skips the effect, so pace them out.
+        if (this.item === $item(_templateObject3$1 || (_templateObject3$1 = _taggedTemplateLiteral(["d12"])))) {
+          for (var i = 0; i < usable; i++) kolmafia.use(1, this.item);
+        } else {
+          kolmafia.use(usable, this.item);
+        }
+      });
+      return spent;
     }
   }]);
 }(Source);
@@ -1496,29 +2276,35 @@ var SkillSource = /*#__PURE__*/function (_Source2) {
     get: function get() {
       return kolmafia.mpCost(this.skill) * 2;
     }
+
+    // A skill costs no meat, so there is nothing extra for `plan` to check.
   }, {
-    key: "plan",
-    value: function plan(_options, _state, _canAccessMall) {
-      if (!have(this.skill) || !kolmafia.isUnrestricted(this.skill)) return null;
-      if (kolmafia.advCost(this.skill) > 0) return null;
-      if (kolmafia.mpCost(this.skill) > kolmafia.myMaxmp()) return null;
-      if (kolmafia.hpCost(this.skill) >= kolmafia.myHp()) return null;
-      if (kolmafia.soulsauceCost(this.skill) > kolmafia.mySoulsauce()) return null;
+    key: "feasible",
+    value: function feasible(_options, _canAccessMall) {
+      if (!have(this.skill) || !kolmafia.isUnrestricted(this.skill)) return false;
+      if (kolmafia.advCost(this.skill) > 0) return false;
+      if (kolmafia.mpCost(this.skill) > kolmafia.myMaxmp()) return false;
+      if (kolmafia.hpCost(this.skill) >= kolmafia.myHp()) return false;
+      if (kolmafia.soulsauceCost(this.skill) > kolmafia.mySoulsauce()) return false;
       if (RICHIE_SONGS.has(this.skill) && (kolmafia.myClass() !== $class(_templateObject4$1 || (_templateObject4$1 = _taggedTemplateLiteral(["Accordion Thief"]))) || kolmafia.myLevel() < 15)) {
-        return null;
+        return false;
       }
 
       // Don't recast a blessing while a rival blessing is active — they bounce.
       if (isBlessing(this.skill) && kolmafia.myClass() !== $class(_templateObject5$1 || (_templateObject5$1 = _taggedTemplateLiteral(["Turtle Tamer"]))) && anyDisdainActive()) {
-        return null;
+        return false;
       }
-      if (CHEAT_CODES.has(this.skill) && kolmafia.availableAmount($item(_templateObject6$1 || (_templateObject6$1 = _taggedTemplateLiteral(["Powerful Glove"])))) === 0) {
-        return null;
-      }
-      return {
+      return !(CHEAT_CODES.has(this.skill) && kolmafia.availableAmount($item(_templateObject6$1 || (_templateObject6$1 = _taggedTemplateLiteral(["Powerful Glove"])))) === 0);
+    }
+  }, {
+    key: "plan",
+    value: function plan(options, _state, canAccessMall) {
+      return this.feasible(options, canAccessMall) ? {
         meatCost: 0,
+        unitPrice: 0,
+        toBuy: 0,
         wish: false
-      };
+      } : null;
     }
 
     /** How many casts our HP and soulsauce pools allow right now (capped at 10). */
@@ -1536,6 +2322,7 @@ var SkillSource = /*#__PURE__*/function (_Source2) {
       if (needGlove) kolmafia.equip($slot(_templateObject9$1 || (_templateObject9$1 = _taggedTemplateLiteral(["acc1"]))), $item(_templateObject0 || (_templateObject0 = _taggedTemplateLiteral(["Powerful Glove"]))));
       kolmafia.useSkill(Math.min(this.affordableCasts, amount), this.skill);
       if (saved && saved !== $item(_templateObject1 || (_templateObject1 = _taggedTemplateLiteral(["none"])))) kolmafia.equip($slot(_templateObject10 || (_templateObject10 = _taggedTemplateLiteral(["acc1"]))), saved);
+      return 0;
     }
   }]);
 }(Source);
@@ -1565,7 +2352,6 @@ function isCandidateSkill(skill, ctx) {
 
 /** Every item/skill that pushes `target`'s modifier in the desired direction. */
 function sourcesFor(target, options, restrictions) {
-  var wantPositive = target.value >= 0;
   var path = kolmafia.myPath().name;
   var context = {
     inGLover: path === "G-Lover",
@@ -1574,35 +2360,48 @@ function sourcesFor(target, options, restrictions) {
     blockedItems: restrictions.blockedItems,
     blockedSkills: restrictions.blockedSkills
   };
-  var effects = kolmafia.Effect.all().filter(effect => {
-    var value = effectiveModifier(effect, target.modifier, options);
-    return wantPositive ? value > 0 : value < 0;
-  });
   var sources = [];
-  var _iterator = _createForOfIteratorHelper(effects),
-    _step;
-  try {
-    for (_iterator.s(); !(_step = _iterator.n()).done;) {
-      var _effect = _step.value;
-      for (var _i = 0, _itemsGranting = itemsGranting(_effect); _i < _itemsGranting.length; _i++) {
-        var _item = _itemsGranting[_i];
-        if (isCandidateItem(_item, _effect, context)) {
-          sources.push(new ItemSource(_effect, _item));
-        }
-      }
-      for (var _i2 = 0, _skillsGranting = skillsGranting(_effect); _i2 < _skillsGranting.length; _i2++) {
-        var _skill = _skillsGranting[_i2];
-        if (isCandidateSkill(_skill, context)) {
-          sources.push(new SkillSource(_effect, _skill));
-        }
+  for (var _i = 0, _effectsFor = effectsFor(target, options); _i < _effectsFor.length; _i++) {
+    var _effect = _effectsFor[_i];
+    for (var _i2 = 0, _itemsGranting = itemsGranting(_effect); _i2 < _itemsGranting.length; _i2++) {
+      var _item = _itemsGranting[_i2];
+      if (isCandidateItem(_item, _effect, context)) {
+        sources.push(new ItemSource(_effect, _item));
       }
     }
-  } catch (err) {
-    _iterator.e(err);
-  } finally {
-    _iterator.f();
+    for (var _i3 = 0, _skillsGranting = skillsGranting(_effect); _i3 < _skillsGranting.length; _i3++) {
+      var _skill = _skillsGranting[_i3];
+      if (isCandidateSkill(_skill, context)) {
+        sources.push(new SkillSource(_effect, _skill));
+      }
+    }
   }
   return sources;
+}
+var effectIndex = new Map();
+
+/**
+ * Every effect that pushes `modifier` the wanted way, memoised for the session.
+ *
+ * Scanning `Effect.all()` costs a native call per effect, and we re-plan several
+ * times per target — `all res` alone asks five times. Which *way* an effect
+ * moves a modifier doesn't change as we buff, even where percentages are folded
+ * onto a live base stat, so only the membership is cached; `plan.ts` reads the
+ * amounts fresh each time.
+ */
+function effectsFor(target, options) {
+  var wantPositive = directionOf(target) > 0;
+  var modifier = target.modifier;
+  var key = "".concat(modifier, "|").concat(wantPositive, "|").concat(options.ignorePercentages);
+  var cached = effectIndex.get(key);
+  if (!cached) {
+    cached = kolmafia.Effect.all().filter(effect => {
+      var value = effectiveModifier(effect, modifier, options);
+      return wantPositive ? value > 0 : value < 0;
+    });
+    effectIndex.set(key, cached);
+  }
+  return cached;
 }
 var itemIndex = null;
 var skillIndex = null;
@@ -1618,27 +2417,28 @@ function skillsGranting(effect) {
 /** Group things by the effect they grant, skipping those that grant nothing. */
 function indexByEffect(things, grantedBy) {
   var index = new Map();
-  var _iterator2 = _createForOfIteratorHelper(things),
-    _step2;
+  var _iterator = _createForOfIteratorHelper(things),
+    _step;
   try {
-    for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-      var thing = _step2.value;
+    for (_iterator.s(); !(_step = _iterator.n()).done;) {
+      var thing = _step.value;
       var _effect2 = grantedBy(thing);
       if (_effect2 === $effect(_templateObject11 || (_templateObject11 = _taggedTemplateLiteral(["none"])))) continue;
       var list = index.get(_effect2);
       if (list) list.push(thing);else index.set(_effect2, [thing]);
     }
   } catch (err) {
-    _iterator2.e(err);
+    _iterator.e(err);
   } finally {
-    _iterator2.f();
+    _iterator.f();
   }
   return index;
 }
 
 var _templateObject, _templateObject2, _templateObject3, _templateObject4, _templateObject5, _templateObject6, _templateObject7, _templateObject8, _templateObject9;
-var PREWARM_COUNT = 20;
-var MAX_ITERATIONS = 500;
+
+/** The one slot class KoL limits: accordion songs share a rack of 3 or 4. */
+var SONG_SLOT = "song";
 
 /** Live value of a modifier, reading buffed stats where mafia has no plain modifier. */
 function currentValue(modifier) {
@@ -1654,161 +2454,611 @@ function currentValue(modifier) {
     case $modifier(_templateObject8 || (_templateObject8 = _taggedTemplateLiteral(["Maximum HP"]))):
       return kolmafia.myMaxhp();
     case $modifier(_templateObject9 || (_templateObject9 = _taggedTemplateLiteral(["Familiar Weight"]))):
-      return kolmafia.numericModifier(modifier) + kolmafia.familiarWeight(kolmafia.myFamiliar());
+      // libram folds in soup weight, Fidoxene's floor and a feasted familiar,
+      // none of which `familiarWeight` alone reports.
+      return totalFamiliarWeight();
     default:
       return kolmafia.numericModifier(modifier);
   }
 }
-function satisfied(target, value) {
-  return target.value >= 0 ? target.value <= value : target.value >= value;
+
+/**
+ * How far the modifier still has to move, as a positive number. Zero or less
+ * means the target is met.
+ *
+ * Flipping the sign here is what lets one solver serve `400 initiative` and
+ * `-combat` alike: past this point everything is "more is better".
+ *
+ * An open-ended goal is genuinely infinite demand. The solver caps its table at
+ * what is actually achievable, so this asks for everything and gets back the
+ * most the budget will buy — no arbitrary stand-in number required.
+ */
+function needFor(target) {
+  if (target.value === null) return Infinity;
+  return directionOf(target) * (target.value - currentValue(target.modifier));
 }
 
-/** The purely effect-level reasons to skip a source this iteration. */
-function effectSkippable(source, target, state, satisfiedThisTarget) {
-  var effect = source.effect;
-  var active = kolmafia.haveEffect(effect);
-  return state.blockedSources.has(source.key) || FIXED_BLOCKED_EFFECTS.has(effect) || satisfiedThisTarget.has(effect) || isSongEffect(effect) && active === 0 && songSlotsFull() || mutuallyExcluded(effect) || active >= target.minTurns;
+/**
+ * What a plan is denominated in.
+ *
+ * `meat` is the total to hold every chosen effect for `minTurns`, bounded by
+ * `totalmeat`. `meat-per-adventure` is what `meatperadventure` asks for: a
+ * limit on the summed price per adventure of effect. Each is a plain budget in
+ * its own currency, so the solver handles either without a second dimension —
+ * but only one at a time, which is why `meatperadventure` picks the currency.
+ */
+
+function costModeFor(target) {
+  return target.meatPerAdventureLimit > 0 ? "meat-per-adventure" : "meat";
 }
-/** Rank candidates by efficiency, warming and re-scoring the front-runners' prices. */
-function rankSources(candidates, target, options, canAccessMall) {
-  var wantPositive = target.value >= 0;
-  var byEfficiency = (a, b) => wantPositive ? a.efficiency - b.efficiency : b.efficiency - a.efficiency;
-  var ranked = candidates.map(source => ({
+
+/** What this target may spend, in whatever currency it is planning in. */
+function budgetFor(target, options, state) {
+  if (costModeFor(target) === "meat-per-adventure") {
+    return Math.max(0, target.meatPerAdventureLimit - state.meatPerAdventureSpent);
+  }
+  return Math.max(0, Math.min(target.meatCap, options.maxMeatToSpend) - state.meatSpent);
+}
+/** How much an effect moves this target's modifier, in the wanted direction. */
+function contributionToward(effect, target, options) {
+  return directionOf(target) * effectiveModifier(effect, target.modifier, options);
+}
+
+/** What a source costs this target, in the currency the target is planning in. */
+function priceOf(source, context, active) {
+  if (context.freeEffects.has(source.effect)) return 0;
+  return costModeFor(context.target) === "meat-per-adventure" ? source.meatPerAdventure() : source.costFor(context.target.minTurns, active);
+}
+
+/** The sources for one effect, cheapest first, with the winner's price. */
+function rankByPrice(sources, context, active) {
+  // Decorate-sort-undecorate: `priceOf` reaches into mafia, so pay for it once
+  // per source rather than twice per comparison.
+  var priced = sources.map(source => ({
     source,
-    efficiency: source.efficiency(target, options)
+    price: priceOf(source, context, active)
   }));
-  ranked.sort(byEfficiency);
-  var frontRunners = ranked.slice(0, PREWARM_COUNT);
-  var _iterator = _createForOfIteratorHelper(frontRunners),
+  priced.sort((a, b) => a.price - b.price);
+  return {
+    sources: priced.map(entry => entry.source),
+    price: priced.length > 0 ? priced[0].price : Infinity
+  };
+}
+
+/**
+ * Meat per point of modifier per turn of effect — the number behind `X
+ * efficiency`.
+ *
+ * Kept on roughly its historical scale, because users have memorised values, but
+ * without the remaining-need clamp, which compared against the wrong reading of
+ * the modifier and never bit.
+ */
+function efficiencyOf(source, target, progress) {
+  var gained = progress * Math.min(target.reasonableTurns, source.turnsPerUse);
+  return gained > 0 ? source.baseCost / gained : Infinity;
+}
+
+/** Whether `X efficiency` rules this source out. */
+function tooInefficient(source, target, progress) {
+  if (target.maxEfficiency === null || source.baseCost <= 0) return false;
+  return efficiencyOf(source, target, progress) > target.maxEfficiency;
+}
+
+/** What the modifier owes to effects that are up but expire before `minTurns`. */
+function shortfallFor(target, options) {
+  var total = 0;
+  var _iterator = _createForOfIteratorHelper(effectsFor(target, options)),
     _step;
   try {
     for (_iterator.s(); !(_step = _iterator.n()).done;) {
-      var source = _step.value.source;
-      source.warmPrice(canAccessMall);
+      var effect = _step.value;
+      var turns = kolmafia.haveEffect(effect);
+      if (turns <= 0 || turns >= target.minTurns) continue;
+      var contribution = contributionToward(effect, target, options);
+      if (contribution > 0) total += contribution;
     }
   } catch (err) {
     _iterator.e(err);
   } finally {
     _iterator.f();
   }
-  var _iterator2 = _createForOfIteratorHelper(frontRunners),
+  return total;
+}
+
+/** Sources still worth costing, grouped by the effect they grant. */
+function usableByEffect(sources, context) {
+  var byEffect = new Map();
+  var _iterator2 = _createForOfIteratorHelper(sources),
     _step2;
   try {
     for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-      var entry = _step2.value;
-      entry.efficiency = entry.source.efficiency(target, options);
+      var source = _step2.value;
+      if (FIXED_BLOCKED_EFFECTS.has(source.effect)) continue;
+      if (context.done.has(source.effect)) continue;
+      if (context.state.blockedSources.has(source.key)) continue;
+      if (kolmafia.haveEffect(source.effect) >= context.target.minTurns) continue;
+      if (!source.feasible(context.options, context.canAccessMall)) continue;
+      var existing = byEffect.get(source.effect);
+      if (existing) existing.push(source);else byEffect.set(source.effect, [source]);
     }
   } catch (err) {
     _iterator2.e(err);
   } finally {
     _iterator2.f();
   }
-  ranked.sort(byEfficiency);
-  return ranked;
+  return byEffect;
 }
-/** Apply `source`, confirming it actually granted turns, and report the outcome. */
-function applyGain(source, target, state, options) {
-  var effect = source.effect;
-  var before = kolmafia.haveEffect(effect);
-  var amount = clamp(Math.ceil((target.minTurns - before) / Math.max(1, source.turnsPerUse)), 1, 10);
-  source.apply(amount);
-  var after = kolmafia.haveEffect(effect);
-  if (after !== before) {
-    return {
-      blocked: false,
-      allowStall: before !== 0 && after < 1000,
-      turns: after
-    };
-  }
 
-  // A source can silently grant zero turns (spent consumable, unavailable
-  // skill, exhausted limited buff); resync with KoL in case mafia is behind.
-  kolmafia.refreshStatus();
-  after = kolmafia.haveEffect(effect);
-  if (after !== before) {
-    return {
-      blocked: false,
-      allowStall: false,
-      turns: after
-    };
-  }
+/**
+ * Turn every way of gaining an effect into at most one costed `Candidate`.
+ *
+ * Sources granting the same effect are interchangeable as far as the modifier
+ * is concerned, so the cheapest sets the candidate's price; the rest stay in
+ * order as fallbacks for when a source silently grants nothing.
+ *
+ * Costs start from mafia's cached historical prices. Fetching a live mall price
+ * is a server round trip, so only the most promising `prewarm` candidates get
+ * one, and their costs are then recomputed.
+ */
+function buildCandidates(sources, context) {
+  var prewarm = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 0;
+  var target = context.target,
+    options = context.options;
+  var build = {
+    candidates: [],
+    sourcesFor: new Map(),
+    shortfall: shortfallFor(target, options)
+  };
+  var _iterator3 = _createForOfIteratorHelper(usableByEffect(sources, context)),
+    _step3;
+  try {
+    for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
+      var _step3$value = _slicedToArray(_step3.value, 2),
+        effect = _step3$value[0],
+        granting = _step3$value[1];
+      var active = kolmafia.haveEffect(effect);
+      var gain = contributionToward(effect, target, options);
 
-  // Still nothing gained: block this source (not the whole effect — another
-  // source might work) and move on rather than aborting.
-  if (!options.silent) {
-    kolmafia.printHtml("".concat(source.description, " gained no turns; skipping it."));
+      // Gaining this overwrites any rival already up, so only the difference is
+      // new — and if we are the ones relying on that rival, don't touch it. The
+      // old code wrote the whole group off the moment one member landed; pricing
+      // the swap instead means a better member can still displace a worse one.
+      var rival = activeExclusionSibling(effect);
+      if (rival && (context.freeEffects.has(rival) || context.done.has(rival))) continue;
+      // Only a rival that outlasts the goal is really banked. One that expires
+      // first is already counted in `shortfall`, and charging for it here too
+      // would make displacing it look half as good as it is.
+      var displaced = rival && kolmafia.haveEffect(rival) >= target.minTurns ? contributionToward(rival, target, options) : 0;
+      var progress = gain - displaced;
+      if (progress <= 0) continue;
+
+      // Ranking is the expensive part, so it happens after the cheap rejections.
+      var ranked = rankByPrice(granting, context, active);
+      if (tooInefficient(ranked.sources[0], target, progress)) continue;
+      build.candidates.push({
+        id: effect.name,
+        progress,
+        cost: ranked.price,
+        group: exclusionGroupId(effect),
+        // Renewing a song that's already up takes no new slot, and `freeSongSlots`
+        // has already discounted it from the rack. Claiming one anyway would make
+        // a full rack block the very renewal that keeps it full.
+        slot: isSong(effect) && active === 0 ? SONG_SLOT : undefined
+      });
+      build.sourcesFor.set(effect.name, ranked.sources);
+    }
+  } catch (err) {
+    _iterator3.e(err);
+  } finally {
+    _iterator3.f();
   }
-  state.blockedSources.add(source.key);
+  if (prewarm > 0) refreshFrontRunners(build, context, prewarm);
+  return build;
+}
+
+/** Look up live mall prices for the best-looking candidates and re-cost them. */
+function refreshFrontRunners(build, context, count) {
+  var front = build.candidates.slice().sort((a, b) => a.cost / a.progress - b.cost / b.progress).slice(0, count);
+  var _iterator4 = _createForOfIteratorHelper(front),
+    _step4;
+  try {
+    for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
+      var candidate = _step4.value;
+      // Only the source we would actually reach for is worth a live lookup. A
+      // fallback is consulted only when the primary silently grants nothing, and
+      // pricing every one of them turns 20 round trips into hundreds.
+      var sources = build.sourcesFor.get(candidate.id);
+      if (sources && sources.length > 0) sources[0].warmPrice(context.canAccessMall);
+    }
+  } catch (err) {
+    _iterator4.e(err);
+  } finally {
+    _iterator4.f();
+  }
+  var _iterator5 = _createForOfIteratorHelper(front),
+    _step5;
+  try {
+    for (_iterator5.s(); !(_step5 = _iterator5.n()).done;) {
+      var _candidate = _step5.value;
+      var _sources = build.sourcesFor.get(_candidate.id);
+      if (!_sources || _sources.length === 0) continue;
+      var ranked = rankByPrice(_sources, context, kolmafia.haveEffect(_sources[0].effect));
+      build.sourcesFor.set(_candidate.id, ranked.sources);
+      _candidate.cost = ranked.price;
+    }
+  } catch (err) {
+    _iterator5.e(err);
+  } finally {
+    _iterator5.f();
+  }
+}
+
+/** The question this target is asking the solver, given what we just costed. */
+function solveRequestFor(build, context) {
   return {
-    blocked: true,
-    allowStall: false,
-    turns: after
+    candidates: build.candidates,
+    // Effects that expire before `minTurns` are in the reading but will not
+    // last, so their contribution counts against us until something replaces it.
+    need: needFor(context.target) + build.shortfall,
+    budget: budgetFor(context.target, context.options, context.state),
+    slotCapacity: {
+      [SONG_SLOT]: context.freeSongSlots
+    }
   };
 }
 
-/** Apply effect sources until `target` is met (or we run out of affordable options). */
-function raiseModifier(target, options, state, restrictions) {
+/** What one target should assume the other targets are taking care of. */
+
+/**
+ * Work out which effects are worth buying because they serve several targets.
+ *
+ * Targets are executed one after another, so a later target already benefits
+ * from whatever an earlier one put up. What that misses is the effect no single
+ * target can justify but two together can — `400 init 20 familiar weight` may
+ * share a potion neither would buy alone.
+ *
+ * Two rounds of coordinate descent: the first prices each effect at a fraction
+ * of its cost according to how many targets it advances, which surfaces the
+ * shared ones; the second re-solves at honest prices with the other targets'
+ * picks free. It is a heuristic — a joint solve over every target at once is
+ * combinatorial — but it is cheap and it finds the overlap.
+ */
+function planShared(targets, sourcesPer, options, state) {
+  var nothingShared = targets.map(() => ({
+    freeEffects: new Set(),
+    reservedSongSlots: 0
+  }));
+  if (targets.length < 2) return nothingShared;
   var canAccessMall = get("autoSatisfyWithMall", false);
-  var candidates = sourcesFor(target, options, restrictions);
-  var satisfiedThisTarget = new Set();
-  var meatPerTurnUsed = 0;
-  var lastValue = null;
-  var allowStall = false;
-  for (var iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    var value = currentValue(target.modifier);
-    if (satisfied(target, value)) return;
-    if (lastValue === value && !allowStall) {
-      kolmafia.print("Stopping trying to gain a buff. Value of modifier ".concat(target.modifier, " is ").concat(value, ", same as the previous loop."), "red");
+  var slots = freeSongSlots();
+  var contexts = targets.map(target => ({
+    target,
+    options,
+    state,
+    canAccessMall,
+    freeSongSlots: slots,
+    freeEffects: new Set(),
+    done: new Set()
+  }));
+
+  // One sweep of the sources per target — the expensive part. Both rounds below
+  // re-price what it found rather than asking mafia again.
+  var builds = targets.map((_, i) => buildCandidates(sourcesPer[i], contexts[i]));
+  var serves = new Map();
+  var _iterator6 = _createForOfIteratorHelper(builds),
+    _step6;
+  try {
+    for (_iterator6.s(); !(_step6 = _iterator6.n()).done;) {
+      var build = _step6.value;
+      var _iterator0 = _createForOfIteratorHelper(build.candidates),
+        _step0;
+      try {
+        for (_iterator0.s(); !(_step0 = _iterator0.n()).done;) {
+          var candidate = _step0.value;
+          serves.set(candidate.id, (serves.get(candidate.id) ?? 0) + 1);
+        }
+      } catch (err) {
+        _iterator0.e(err);
+      } finally {
+        _iterator0.f();
+      }
+    }
+  } catch (err) {
+    _iterator6.e(err);
+  } finally {
+    _iterator6.f();
+  }
+  var solveWith = (index, free, discount) => {
+    var build = builds[index];
+    var request = solveRequestFor(build, contexts[index]);
+    request.candidates = build.candidates.map(candidate => {
+      var cost = free.has(candidate.id) ? 0 : discount ? candidate.cost / Math.max(1, serves.get(candidate.id) ?? 1) : candidate.cost;
+      return cost === candidate.cost ? candidate : _objectSpread2(_objectSpread2({}, candidate), {}, {
+        cost
+      });
+    });
+    return new Set(solve(request).chosen.map(candidate => candidate.id));
+  };
+  var unionExcept = (chosen, skip) => {
+    var union = new Set();
+    for (var i = 0; i < chosen.length; i++) {
+      if (i === skip) continue;
+      var _iterator7 = _createForOfIteratorHelper(chosen[i]),
+        _step7;
+      try {
+        for (_iterator7.s(); !(_step7 = _iterator7.n()).done;) {
+          var id = _step7.value;
+          union.add(id);
+        }
+      } catch (err) {
+        _iterator7.e(err);
+      } finally {
+        _iterator7.f();
+      }
+    }
+    return union;
+  };
+
+  // Round one, at a discount, each target seeing what the earlier ones took.
+  var draft = [];
+  for (var i = 0; i < targets.length; i++) draft.push(solveWith(i, unionExcept(draft, i), true));
+  // Round two, at honest prices, each target seeing every other target's picks.
+  var chosen = targets.map((_, i) => solveWith(i, unionExcept(draft, i), false));
+
+  // The effect behind a candidate id, without round-tripping through the name —
+  // KoL has effects that share one.
+  var effectFor = (index, id) => {
+    var _builds$index$sources;
+    return (_builds$index$sources = builds[index].sourcesFor.get(id)) === null || _builds$index$sources === void 0 || (_builds$index$sources = _builds$index$sources[0]) === null || _builds$index$sources === void 0 ? void 0 : _builds$index$sources.effect;
+  };
+  return targets.map((_, i) => {
+    // Goals execute in order, so only an *earlier* goal's purchase is genuinely
+    // free to this one. Crediting a later goal's pick would leave whichever of
+    // them runs first paying for something neither plan budgeted.
+    var freeEffects = new Set();
+    for (var earlier = 0; earlier < i; earlier++) {
+      var _iterator8 = _createForOfIteratorHelper(chosen[earlier]),
+        _step8;
+      try {
+        for (_iterator8.s(); !(_step8 = _iterator8.n()).done;) {
+          var id = _step8.value;
+          var effect = effectFor(earlier, id);
+          if (effect) freeEffects.add(effect);
+        }
+      } catch (err) {
+        _iterator8.e(err);
+      } finally {
+        _iterator8.f();
+      }
+    }
+
+    // Hold slots only for songs a later goal will have to cast itself: ones this
+    // goal isn't already casting, and that aren't up (a renewal takes no slot).
+    var reserved = new Set();
+    for (var later = i + 1; later < targets.length; later++) {
+      var _iterator9 = _createForOfIteratorHelper(chosen[later]),
+        _step9;
+      try {
+        for (_iterator9.s(); !(_step9 = _iterator9.n()).done;) {
+          var _id = _step9.value;
+          if (chosen[i].has(_id) || reserved.has(_id)) continue;
+          var _effect = effectFor(later, _id);
+          if (_effect && isSong(_effect) && kolmafia.haveEffect(_effect) === 0) reserved.add(_id);
+        }
+      } catch (err) {
+        _iterator9.e(err);
+      } finally {
+        _iterator9.f();
+      }
+    }
+    return {
+      freeEffects,
+      reservedSongSlots: reserved.size
+    };
+  });
+}
+
+/** Candidates whose live mall price we look up before committing to a plan. */
+var PREWARM_COUNT = 20;
+
+/** How many times we re-plan after the world fails to match the plan. */
+var MAX_REPLANS = 12;
+/**
+ * Bring one effect up to `minTurns`, trying each source in turn.
+ *
+ * A source can silently grant nothing — a spent consumable, an exhausted
+ * limited buff, mafia being out of sync. When that happens we block that source
+ * and try another way to the same effect rather than giving up on the effect.
+ */
+function gainEffect(effect, sources, context, target) {
+  var options = context.options,
+    state = context.state;
+  var _iterator = _createForOfIteratorHelper(sources),
+    _step;
+  try {
+    for (_iterator.s(); !(_step = _iterator.n()).done;) {
+      var source = _step.value;
+      if (state.blockedSources.has(source.key)) continue;
+      var before = kolmafia.haveEffect(effect);
+      if (before >= target.minTurns) return {
+        turns: before,
+        exhausted: false
+      };
+      var uses = source.usesFor(target.minTurns, before);
+      var plan = source.plan(options, state, context.canAccessMall, uses, target.meatCap);
+      if (!plan) continue;
+      if (plan.wish) kolmafia.abort("wish for ".concat(effect));
+      if (!options.silent) kolmafia.printHtml("".concat(source.description, " x").concat(uses));
+      // Charged on what was actually bought, and charged whether or not the
+      // effect then landed — the meat is gone either way.
+      state.meatSpent += source.apply(uses, plan);
+      var after = kolmafia.haveEffect(effect);
+      if (after === before) {
+        kolmafia.refreshStatus();
+        after = kolmafia.haveEffect(effect);
+      }
+      if (after !== before) {
+        // Counted run-wide so the `meatperadventure` allowance survives re-planning
+        // rather than being handed out again on every pass.
+        state.meatPerAdventureSpent += source.meatPerAdventure();
+        return {
+          turns: after,
+          exhausted: false
+        };
+      }
+      if (!options.silent) kolmafia.printHtml("".concat(source.description, " gained no turns; skipping it."));
+      state.blockedSources.add(source.key);
+    }
+  } catch (err) {
+    _iterator.e(err);
+  } finally {
+    _iterator.f();
+  }
+  return {
+    turns: kolmafia.haveEffect(effect),
+    exhausted: true
+  };
+}
+
+/** Print what the solver decided and why it stopped where it did. */
+function describePlan(result, build, target, need, elapsed) {
+  // With a goal, report where we land — measured off the gap rather than the
+  // live reading, so effects that are up but about to expire aren't counted
+  // twice. Open-ended, there is nothing to land on, so report the gain.
+  var outcome = target.value === null ? "+".concat(formatNumber(result.progress)) : "reaching ".concat(formatNumber(target.value - directionOf(target) * (need - result.progress)), " ") + "(".concat(formatNumber(need), " to go)");
+  kolmafia.printHtml("".concat(target.modifier, ": ").concat(result.chosen.length, " effects for ").concat(formatNumber(result.cost), " meat, ") + "".concat(outcome, " [").concat(result.reason, ", ").concat(result.stats.candidates, " candidates, ").concat(elapsed, "ms]"));
+  var _iterator2 = _createForOfIteratorHelper(result.chosen),
+    _step2;
+  try {
+    for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+      var _build$sourcesFor$get;
+      var candidate = _step2.value;
+      // The efficiency is what `X efficiency` compares against, so showing it here
+      // is how you pick a number for it.
+      var source = (_build$sourcesFor$get = build.sourcesFor.get(candidate.id)) === null || _build$sourcesFor$get === void 0 ? void 0 : _build$sourcesFor$get[0];
+      var efficiency = source ? efficiencyOf(source, target, candidate.progress) : Infinity;
+      kolmafia.printHtml("&nbsp;&nbsp;".concat(candidate.id, ": +").concat(formatNumber(candidate.progress), " over ") + "".concat(formatNumber((source === null || source === void 0 ? void 0 : source.turnsPerUse) ?? 0), " turns for ").concat(formatNumber(candidate.cost), " meat ") + "(".concat(formatNumber(efficiency), " efficiency)"));
+    }
+  } catch (err) {
+    _iterator2.e(err);
+  } finally {
+    _iterator2.f();
+  }
+}
+
+/** Apply effect sources until `target` is met, or nothing affordable is left. */
+function raiseModifier(target, options, state, sources) {
+  var freeEffects = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : new Set();
+  var reservedSongSlots = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : 0;
+  var canAccessMall = get("autoSatisfyWithMall", false);
+  /** Effects we've finished with, whether they landed or turned out unusable. */
+  var done = new Set();
+  var contextNow = () => ({
+    target,
+    options,
+    state,
+    canAccessMall,
+    freeSongSlots: freeSongSlots(reservedSongSlots),
+    freeEffects,
+    done
+  });
+  for (var replan = 0; replan < MAX_REPLANS; replan++) {
+    var context = contextNow();
+    var started = kolmafia.gametimeToInt();
+    var build = buildCandidates(sources, context, PREWARM_COUNT);
+    var request = solveRequestFor(build, context);
+    if (request.need <= 0) return;
+    var result = solve(request);
+    if (!options.silent) {
+      describePlan(result, build, target, request.need, kolmafia.gametimeToInt() - started);
+    }
+    if (result.chosen.length === 0) {
+      if (!options.silent) {
+        kolmafia.print("Nothing left that moves ".concat(target.modifier, " (").concat(result.reason, ")."), "red");
+      }
       return;
     }
-    allowStall = false;
-    lastValue = value;
-    var ranked = rankSources(candidates, target, options, canAccessMall);
-    var appliedOne = false;
-    var _iterator3 = _createForOfIteratorHelper(ranked),
+    if (options.dryRun) return;
+    var applied = 0;
+    var _iterator3 = _createForOfIteratorHelper(result.chosen),
       _step3;
     try {
       for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
-        var _step3$value = _step3.value,
-          source = _step3$value.source,
-          efficiency = _step3$value.efficiency;
-        if (effectSkippable(source, target, state, satisfiedThisTarget)) {
+        var _sources$;
+        var candidate = _step3.value;
+        // Take the effect from its own sources rather than re-resolving the name,
+        // which KoL lets more than one effect share.
+        var _sources = build.sourcesFor.get(candidate.id) ?? [];
+        var effect = (_sources$ = _sources[0]) === null || _sources$ === void 0 ? void 0 : _sources$.effect;
+        if (!effect) continue;
+        var step = gainEffect(effect, _sources, context, target);
+        if (step.exhausted) {
+          done.add(effect);
           continue;
         }
-        var plan = source.plan(options, state, canAccessMall);
-        if (!plan) continue;
-
-        // Check the shared per-turn meat budget now, but only spend it once we commit.
-        var plannedSpend = target.meatPerTurnLimit > 0 ? source.meatPerTurn() : 0;
-        if (plannedSpend + meatPerTurnUsed > target.meatPerTurnLimit) continue;
-        if (target.maxEfficiency !== null && Math.abs(efficiency) > target.maxEfficiency) {
-          break;
-        }
-        if (!options.silent) kolmafia.printHtml("".concat(source.description, ": ").concat(efficiency, " efficiency"));
-        if (plan.wish) kolmafia.abort("wish for ".concat(source.effect));
-        var result = applyGain(source, target, state, options);
-        // apply() already made any purchase, so charge it even if the source
-        // then granted nothing.
-        state.meatSpent += plan.meatCost;
-        if (result.blocked) continue;
-        if (result.allowStall) allowStall = true;
-        if (result.turns >= target.minTurns) satisfiedThisTarget.add(source.effect);
-        meatPerTurnUsed += plannedSpend;
-        appliedOne = true;
-        break;
+        applied++;
+        if (step.turns >= target.minTurns) done.add(effect);
       }
+
+      // Nothing landed, so another identical pass would only repeat itself. The
+      // plan was a prediction either way; the next lap re-measures and re-prices.
     } catch (err) {
       _iterator3.e(err);
     } finally {
       _iterator3.f();
     }
-    if (!appliedOne) return;
+    if (applied === 0) return;
   }
 }
 
-var VERSION = "1.0.0";
+var VERSION = "2.0.0";
+
+/** Printed before anything else, so `embiggen help` says which build this is. */
+function printBanner() {
+  kolmafia.printHtml("embiggen v".concat(VERSION));
+}
+
+/**
+ * How much `RunState.meatSpent` may reach by the time this goal is done.
+ *
+ * Each goal gets an even slice of what's left, so one that can never be
+ * satisfied cannot swallow the whole budget; whatever it doesn't spend rolls on
+ * to the next. A goal with no target value has nothing else to stop it, so it
+ * gets a rail of its own — applied here rather than by clamping the run-wide
+ * budget every other goal is working to.
+ */
+function capFor(goal, options, state, remaining) {
+  var share = (options.maxMeatToSpend - state.meatSpent) / remaining;
+  var railed = goal.value === null && options.maxMeatToSpend === NO_MEAT_LIMIT;
+  return state.meatSpent + (railed ? Math.min(share, OPEN_ENDED_MEAT_LIMIT) : share);
+}
+
+/** What we actually ended up with, against what was asked for. */
+function printOutcome(goals, state) {
+  var _iterator = _createForOfIteratorHelper(goals),
+    _step;
+  try {
+    for (_iterator.s(); !(_step = _iterator.n()).done;) {
+      var goal = _step.value;
+      var value = formatNumber(currentValue(goal.modifier));
+      // An open-ended goal can't fall short — it got whatever the budget bought.
+      if (goal.value === null) {
+        kolmafia.print("".concat(goal.modifier, ": ").concat(value), "blue");
+        continue;
+      }
+      var met = needFor(goal) <= 0;
+      kolmafia.print("".concat(goal.modifier, ": ").concat(value, " of ").concat(formatNumber(goal.value)).concat(met ? "" : " — short"), met ? "green" : "red");
+    }
+  } catch (err) {
+    _iterator.e(err);
+  } finally {
+    _iterator.f();
+  }
+  kolmafia.printHtml("Spent ".concat(formatNumber(state.meatSpent), " meat."));
+}
 function main(input) {
   if (input.trim() === "" || input.includes("help")) {
+    printBanner();
     printUsage();
     return;
   }
@@ -1817,16 +3067,21 @@ function main(input) {
     unrecognised = _parseCommand.unrecognised,
     minTurns = _parseCommand.minTurns,
     maxEfficiency = _parseCommand.maxEfficiency,
-    meatSpendPerTurnLimit = _parseCommand.meatSpendPerTurnLimit,
+    meatPerAdventureLimit = _parseCommand.meatPerAdventureLimit,
     options = _parseCommand.options;
   if (!options.silent) {
-    kolmafia.printHtml("embiggen v".concat(VERSION));
-    if (options.maxMeatToSpend !== DEFAULT_MAX_MEAT) {
-      kolmafia.printHtml("Spending up to ".concat(options.maxMeatToSpend, " meat."));
+    printBanner();
+    if (options.maxMeatToSpend !== NO_MEAT_LIMIT) {
+      kolmafia.printHtml("Spending up to ".concat(formatNumber(options.maxMeatToSpend), " meat in total."));
+    } else if (targets.some(_ref => {
+      var value = _ref.value;
+      return value === null;
+    })) {
+      kolmafia.printHtml("No total spending limit, so each goal with no target value is capped at " + "".concat(formatNumber(OPEN_ENDED_MEAT_LIMIT), " meat. Set your own with ") + "<strong>X totalmeat</strong>.");
     }
-    if (maxEfficiency !== null) kolmafia.printHtml("".concat(maxEfficiency, " efficiency"));
-    if (meatSpendPerTurnLimit > 0) {
-      kolmafia.printHtml("".concat(meatSpendPerTurnLimit, " total meat spent per turn of effect"));
+    if (maxEfficiency !== null) kolmafia.printHtml("".concat(formatNumber(maxEfficiency), " efficiency"));
+    if (meatPerAdventureLimit > 0) {
+      kolmafia.printHtml("".concat(formatNumber(meatPerAdventureLimit), " meat per adventure of effect, across all effects."));
     }
     if (!kolmafia.canInteract()) {
       kolmafia.printHtml("We're not in ronin, so we might break. I didn't test for this.");
@@ -1837,17 +3092,17 @@ function main(input) {
   // report it and buff nothing rather than silently half-applying.
   if (unrecognised.length > 0) {
     if (!options.silent) {
-      var _iterator = _createForOfIteratorHelper(unrecognised),
-        _step;
+      var _iterator2 = _createForOfIteratorHelper(unrecognised),
+        _step2;
       try {
-        for (_iterator.s(); !(_step = _iterator.n()).done;) {
-          var phrase = _step.value;
+        for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+          var phrase = _step2.value;
           kolmafia.printHtml("Did not recognise modifier \"".concat(phrase, "\"."));
         }
       } catch (err) {
-        _iterator.e(err);
+        _iterator2.e(err);
       } finally {
-        _iterator.f();
+        _iterator2.f();
       }
     }
     return;
@@ -1863,29 +3118,39 @@ function main(input) {
   var restrictions = buildRestrictions(options);
   var state = newRunState();
   var reasonableTurns = Math.max(minTurns, Math.min(kolmafia.myAdventures(), 20));
-  var perTargetMeatLimit = meatSpendPerTurnLimit / targets.length;
-  var _iterator2 = _createForOfIteratorHelper(targets),
-    _step2;
-  try {
-    for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-      var _step2$value = _step2.value,
-        modifier = _step2$value.modifier,
-        value = _step2$value.value;
-      var target = {
-        modifier,
-        value,
-        minTurns,
-        reasonableTurns,
-        maxEfficiency,
-        meatPerTurnLimit: perTargetMeatLimit
-      };
-      raiseModifier(target, options, state, restrictions);
-    }
-  } catch (err) {
-    _iterator2.e(err);
-  } finally {
-    _iterator2.f();
+  var goals = targets.map(_ref2 => {
+    var modifier = _ref2.modifier,
+      value = _ref2.value;
+    return {
+      modifier,
+      value,
+      minTurns,
+      reasonableTurns,
+      // An open-ended goal has nothing else to stop it, so it gets the default
+      // cap; one with a target value stops when it gets there, and capping it
+      // could reject the effect that would have closed the gap.
+      maxEfficiency: maxEfficiency ?? (value === null ? OPEN_ENDED_EFFICIENCY : null),
+      meatPerAdventureLimit,
+      meatCap: NO_MEAT_LIMIT
+    };
+  });
+  for (var i = 0; i < goals.length; i++) goals[i].meatCap = capFor(goals[i], options, state, goals.length);
+
+  // Work out up front which effects serve more than one goal, so no goal turns
+  // down a buff that only pays for itself once another goal shares the bill.
+  // Caps are set first, so this plans against the budgets execution will have.
+  var sourcesPer = goals.map(goal => sourcesFor(goal, options, restrictions));
+  var shared = planShared(goals, sourcesPer, options, state);
+  for (var _i = 0; _i < goals.length; _i++) {
+    // Re-derived as we go, so whatever an earlier goal didn't spend rolls on.
+    goals[_i].meatCap = capFor(goals[_i], options, state, goals.length - _i);
+    var _shared$_i = shared[_i],
+      freeEffects = _shared$_i.freeEffects,
+      reservedSongSlots = _shared$_i.reservedSongSlots;
+    raiseModifier(goals[_i], options, state, sourcesPer[_i], freeEffects, reservedSongSlots);
   }
+  if (options.silent) return;
+  if (options.dryRun) kolmafia.printHtml("Dry run: nothing was bought or cast.");else printOutcome(goals, state);
 }
 
 exports.main = main;
